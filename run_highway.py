@@ -12,6 +12,7 @@ class HighwayMultiEnv(ParallelEnv):
             "observation": {"type": "Kinematics"},
             "duration": 40
         })
+        self.core_env = self.env.unwrapped
         self.agents = [f"car_{i}" for i in range(num_agents)]
         self.num_cars = num_agents
 
@@ -31,16 +32,20 @@ class HighwayMultiEnv(ParallelEnv):
 
         for i, agent in enumerate(self.agents):
             action = actions.get(agent, self.env.action_space.sample())
-            vehicle = self.env.road.vehicles[i]
+            vehicle = self.core_env.road.vehicles[i]
 
             if action == 0:
                 vehicle.target_speed -= 1
             elif action == 2:
                 vehicle.target_speed += 1
             elif action == 3:
-                vehicle.target_lane_index = max(0, vehicle.target_lane_index -1)
+                road, start, lane = vehicle.target_lane_index
+                lane = max(0, lane - 1)
+                vehicle.target_lane_index = (road, start, lane)
             elif action == 4:
-                vehicle.target_lane_index = min(len(self.env.road.network.graph) - 1, vehicle.target_lane_index + 1)
+                road, start, lane = vehicle.target_lane_index
+                lane = min(len(self.core_env.road.network.graph) - 1, lane + 1)
+                vehicle.target_lane_index = (road, start, lane)
         
         obs, _, term, trunc, info = self.env.step(1)
 
@@ -75,8 +80,8 @@ class HighwayMultiEnv(ParallelEnv):
         
     # 車両の観測
     def _get_vehicle_observation(self, index):
-        v = self.env.road.vehicles[index]
-        return np.array([v.position[0], v.position[1], v.spped], dtype=np.float32)
+        v = self.core_env.road.vehicles[index]
+        return np.array([v.position[0], v.position[1], v.speed], dtype=np.float32)
 
         # 報酬計算
     def _calc_reward(self, vehicle):
