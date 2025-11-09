@@ -2,7 +2,7 @@ import supersuit as ss
 from pettingzoo.utils import parallel_to_aec
 from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
-from highway_env import HighwayMultiEnv
+from run_highway import HighwayMultiEnv
 
 def make_env(num_agents):
     env = HighwayMultiEnv(num_agents=num_agents)
