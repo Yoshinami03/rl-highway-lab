@@ -17,7 +17,9 @@ class HighwayMultiEnv(ParallelEnv):
 
     def reset(self, seed=None, options=None):
         obs, info = self.env.reset()
-        obs_dict = {agent: obs for agent in self.agents}
+        obs_dict = {}
+        for i, agent in enumerate(self.agents):
+            obs_dict[agent] = self._get_vehicle_observation(i)
         info_dict = {agent: info for agent in self.agents}
         return obs_dict, info_dict
 
@@ -56,7 +58,11 @@ class HighwayMultiEnv(ParallelEnv):
 
     def close(self):
         self.env.close()
-
+        
+    # 車両の観測
+    def _get_vehicle_observation(self, index):
+        v = self.env.road.vehicles[index]
+        return np.array([v.position[0], v.position[1], v.spped], dtype=np.float32)
 
 if __name__ == "__main__":
     env = HighwayMultiEnv(num_agents=5)
