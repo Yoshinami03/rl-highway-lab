@@ -28,16 +28,30 @@ class HighwayMultiEnv(ParallelEnv):
         actions: dict[str, int]
           例: {"car_0": 0, "car_1": 2, ...}
         """
-        obs_list, reward_list = {}, {}
-        terminated, truncated = {}, {}
-        info_dict = {}
+
+        for i, agent in enumerate(self.agents):
+            action = actions.get(agent, self.env.action_space.sample())
+            vehicle = self.env.road.vehicles[i]
+
+            if action == 0:
+                vehicle.target_speed -= 1
+            elif action == 2:
+                vehicle.target_speed += 1
+            elif action == 3:
+                vehicle.target_lane_index = max(0, vehicle.target_lane_index -1)
+            elif action == 4:
+                vehicle.target_lane_index = min(len(self.env.road.network.graph) - 1, vehicle.target_lane_index + 1)
+        
+        obs, _, term, trunc, info = self.env.step(1)
+
+        obs_dict, reward_list, terminated, truncated, info_dict  = {}, {}, {}, {}, {}
 
         # 全エージェントを順番にstep
         for i, agent in enumerate(self.agents):
             action = actions.get(agent, self.env.action_space.sample())
             obs, reward, term, trunc, info = self.env.step(action)
 
-            obs_list[agent] = obs
+            obs_dict[agent] = obs
             reward_list[agent] = reward
             terminated[agent] = term
             truncated[agent] = trunc
@@ -48,10 +62,10 @@ class HighwayMultiEnv(ParallelEnv):
 
         if done:
             obs, info = self.env.reset()
-            obs_list = {agent: obs for agent in self.agents}
+            obs_dict = {agent: self._get_vehicle_observation(i) for i, agent in enumerate(self.agents)}
             info_dict = {agent: info for agent in self.agents}
 
-        return obs_list, reward_list, terminated, truncated, info_dict
+        return obs_dict, reward_list, terminated, truncated, info_dict
 
     def render(self):
         self.env.render()
@@ -63,6 +77,14 @@ class HighwayMultiEnv(ParallelEnv):
     def _get_vehicle_observation(self, index):
         v = self.env.road.vehicles[index]
         return np.array([v.position[0], v.position[1], v.spped], dtype=np.float32)
+
+        # 報酬計算
+    def _calc_reward(self, vehicle):
+        reward = 0
+        reward += vehicle.speed / 30.0
+        if vehicle.crashed :
+            reward -= 100
+        return reward
 
 if __name__ == "__main__":
     env = HighwayMultiEnv(num_agents=5)
