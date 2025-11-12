@@ -11,7 +11,7 @@ if [ -z "$VIRTUAL_ENV" ]; then
         exit 1
     fi
 else
-    echo "✅ 仮想環境はすでに有効化されています: $VIRTUAL_ENV"
+    echo "✅ 仮想環境有効化済み！: $VIRTUAL_ENV"
 fi
 
 # Pythonスクリプト実行
