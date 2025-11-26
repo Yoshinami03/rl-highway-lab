@@ -1,9 +1,8 @@
 from pettingzoo.utils import ParallelEnv
 import gymnasium as gym
-import highway_env
 import numpy as np
 from gymnasium import spaces
-
+import highway_env 
 
 class HighwayMultiEnv(ParallelEnv):
     metadata = {"render_modes": ["human", "rgb_array"], "name": "highway_multi_merge", "is_parallel": True}
@@ -22,7 +21,8 @@ class HighwayMultiEnv(ParallelEnv):
         )
         self.core_env = self.env.unwrapped
         self.possible_agents = [f"car_{i}" for i in range(num_agents)]
-        self.num_cars = num_agents
+        
+        # 観測空間の定義
         obs_low = np.array([-np.inf, -np.inf, 0.0], dtype=np.float32)
         obs_high = np.array([np.inf, np.inf, np.inf], dtype=np.float32)
         obs_space = spaces.Box(low=obs_low, high=obs_high, shape=(3,), dtype=np.float32)
@@ -58,10 +58,18 @@ class HighwayMultiEnv(ParallelEnv):
                 v.target_speed += 1.0
             elif action == 3:
                 road, start, lane = v.target_lane_index
-                v.target_lane_index = (road, start, max(0, lane - 1))
+                new_lane = max(0, lane - 1)
+                v.target_lane_index = (road, start, new_lane)
             elif action == 4:
                 road, start, lane = v.target_lane_index
-                v.target_lane_index = (road, start, lane + 1)
+                new_lane = lane + 1
+                try:
+                    # このレーンが存在しない場合は IndexError が出るので、そのときはレーン変更しない
+                    self.core_env.road.network.get_lane((road, start, new_lane))
+                    v.target_lane_index = (road, start, new_lane)
+                except IndexError:
+                    # 右端レーンなど、存在しないレーンに出ようとしたら無視
+                    pass
 
         _, _, term, trunc, _ = self.env.step(1)
 
@@ -83,6 +91,9 @@ class HighwayMultiEnv(ParallelEnv):
         self.env.close()
 
     def _get_vehicle_observation(self, i):
+        if i >= len(self.core_env.road.vehicles):
+            return np.zeros(3, dtype=np.float32)
+            
         v = self.core_env.road.vehicles[i]
         return np.array([v.position[0], v.position[1], v.speed], dtype=np.float32)
 
@@ -91,18 +102,3 @@ class HighwayMultiEnv(ParallelEnv):
         if getattr(v, "crashed", False):
             r -= 100.0
         return float(r)
-
-
-if __name__ == "__main__":
-    env = HighwayMultiEnv(num_agents=5)
-    obs, info = env.reset()
-
-    for _ in range(1000):
-        actions = {agent: env.env.action_space.sample() for agent in env.agents}
-        obs, rewards, terminations, truncations, infos = env.step(actions)
-        env.render()
-
-        if all(terminations.values()) or all(truncations.values()):
-            obs, info = env.reset()
-
-    env.close()

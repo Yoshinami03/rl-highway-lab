@@ -1,19 +1,17 @@
 import supersuit as ss
-from pettingzoo.utils import parallel_to_aec
 from stable_baselines3 import PPO
-from stable_baselines3.common.env_util import make_vec_env
 from run_highway import HighwayMultiEnv
 
 
-def make_env(num_agents):
+def make_env(num_agents: int, num_vec_envs: int = 4, num_cpus: int = 4):
     env = HighwayMultiEnv(num_agents=num_agents, render_mode=None)
     env = ss.pettingzoo_env_to_vec_env_v1(env)
-    env = ss.concat_vec_envs_v1(env, 4, num_cpus=4, base_class="stable_baselines3")
+    env = ss.concat_vec_envs_v1(env, num_vec_envs, num_cpus=num_cpus, base_class="stable_baselines3")
     return env
 
 
 if __name__ == "__main__":
-    vec_env = make_env(num_agents=5)
+    vec_env = make_env(num_agents=5, num_vec_envs=4, num_cpus=4)
 
     model = PPO(
         "MlpPolicy",
