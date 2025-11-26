@@ -1,0 +1,49 @@
+import numpy as np
+from stable_baselines3 import PPO
+from run_highway import HighwayMultiEnv
+from env_config import inference_config, HighwayEnvConfig
+
+
+def run_inference(model_path: str, config: HighwayEnvConfig = None, max_steps: int = 1000):
+    """
+    学習済みモデルで推論を実行
+    
+    Args:
+        model_path: 学習済みモデルのパス
+        config: HighwayEnvConfigインスタンス（Noneの場合はinference_configを使用）
+        max_steps: 最大ステップ数
+    """
+    if config is None:
+        config = inference_config
+    
+    env = HighwayMultiEnv(config=config)
+    model = PPO.load(model_path)
+
+    obs_dict, info = env.reset()
+
+    for _ in range(max_steps):
+        if not env.agents:
+            break
+
+        actions = {}
+        for agent in env.agents:
+            obs_vec = obs_dict[agent]
+            if isinstance(obs_vec, np.ndarray):
+                pass
+            else:
+                obs_vec = np.array(obs_vec, dtype=np.float32)
+            action, _ = model.predict(obs_vec, deterministic=True)
+            actions[agent] = int(action)
+
+        obs_dict, rewards, terminations, truncations, infos = env.step(actions)
+        env.render()
+
+        if any(terminations.values()) or any(truncations.values()):
+            break
+
+    env.close()
+
+
+if __name__ == "__main__":
+    # 設定ファイルから環境設定を読み込み
+    run_inference("highway-merge-ppo", config=inference_config, max_steps=1000)
