@@ -1,102 +1,103 @@
-from pettingzoo import ParallelEnv
+from pettingzoo.utils import ParallelEnv
 import gymnasium as gym
 import highway_env
 import numpy as np
+from gymnasium import spaces
 
 
 class HighwayMultiEnv(ParallelEnv):
+    metadata = {"render_modes": ["human", "rgb_array"], "name": "highway_multi_merge", "is_parallel": True}
+
     def __init__(self, num_agents=5, render_mode="human"):
-        self.env = gym.make("highway-v0", render_mode=render_mode, config={
-            "vehicles_count": num_agents,
-            "controlled_vehicles": num_agents,
-            "observation": {"type": "Kinematics"},
-            "duration": 40
-        })
+        self.render_mode = render_mode
+        self.env = gym.make(
+            "highway-v0",
+            render_mode=render_mode,
+            config={
+                "vehicles_count": num_agents,
+                "controlled_vehicles": num_agents,
+                "observation": {"type": "Kinematics"},
+                "duration": 40,
+            },
+        )
         self.core_env = self.env.unwrapped
-        self.agents = [f"car_{i}" for i in range(num_agents)]
+        self.possible_agents = [f"car_{i}" for i in range(num_agents)]
         self.num_cars = num_agents
+        obs_low = np.array([-np.inf, -np.inf, 0.0], dtype=np.float32)
+        obs_high = np.array([np.inf, np.inf, np.inf], dtype=np.float32)
+        obs_space = spaces.Box(low=obs_low, high=obs_high, shape=(3,), dtype=np.float32)
+        act_space = spaces.Discrete(5)
+        self.observation_spaces = {a: obs_space for a in self.possible_agents}
+        self.action_spaces = {a: act_space for a in self.possible_agents}
+        self.agents = []
+
+    def observation_space(self, agent):
+        return self.observation_spaces[agent]
+
+    def action_space(self, agent):
+        return self.action_spaces[agent]
+
+    @property
+    def unwrapped(self):
+        return self
 
     def reset(self, seed=None, options=None):
-        obs, info = self.env.reset()
-        obs_dict = {}
-        for i, agent in enumerate(self.agents):
-            obs_dict[agent] = self._get_vehicle_observation(i)
-        info_dict = {agent: info for agent in self.agents}
+        obs, info = self.env.reset(seed=seed, options=options)
+        self.agents = self.possible_agents[:]
+        obs_dict = {a: self._get_vehicle_observation(i) for i, a in enumerate(self.agents)}
+        info_dict = {a: {} for a in self.agents}
         return obs_dict, info_dict
 
     def step(self, actions):
-        """
-        actions: dict[str, int]
-          例: {"car_0": 0, "car_1": 2, ...}
-        """
-
-        for i, agent in enumerate(self.agents):
-            action = actions.get(agent, self.env.action_space.sample())
-            vehicle = self.core_env.road.vehicles[i]
-
+        for i, a in enumerate(self.agents):
+            action = actions.get(a, 1)
+            v = self.core_env.road.vehicles[i]
             if action == 0:
-                vehicle.target_speed -= 1
+                v.target_speed = max(0.0, v.target_speed - 1.0)
             elif action == 2:
-                vehicle.target_speed += 1
+                v.target_speed += 1.0
             elif action == 3:
-                road, start, lane = vehicle.target_lane_index
-                lane = max(0, lane - 1)
-                vehicle.target_lane_index = (road, start, lane)
+                road, start, lane = v.target_lane_index
+                v.target_lane_index = (road, start, max(0, lane - 1))
             elif action == 4:
-                road, start, lane = vehicle.target_lane_index
-                lane = min(len(self.core_env.road.network.graph) - 1, lane + 1)
-                vehicle.target_lane_index = (road, start, lane)
-        
-        obs, _, term, trunc, info = self.env.step(1)
+                road, start, lane = v.target_lane_index
+                v.target_lane_index = (road, start, lane + 1)
 
-        obs_dict, reward_list, terminated, truncated, info_dict  = {}, {}, {}, {}, {}
+        _, _, term, trunc, _ = self.env.step(1)
 
-        # 全エージェントを順番にstep
-        for i, agent in enumerate(self.agents):
-            action = actions.get(agent, self.env.action_space.sample())
-            obs, reward, term, trunc, info = self.env.step(action)
+        obs_dict = {a: self._get_vehicle_observation(i) for i, a in enumerate(self.agents)}
+        rewards = {a: self._calc_reward(self.core_env.road.vehicles[i]) for i, a in enumerate(self.agents)}
+        terminations = {a: bool(term) for a in self.agents}
+        truncations = {a: bool(trunc) for a in self.agents}
+        infos = {a: {} for a in self.agents}
 
-            obs_dict[agent] = obs
-            reward_list[agent] = reward
-            terminated[agent] = term
-            truncated[agent] = trunc
-            info_dict[agent] = info
+        if any(terminations.values()) or any(truncations.values()):
+            self.agents = []
 
-        # 終了条件（全体）
-        done = all(terminated.values()) or all(truncated.values())
-
-        if done:
-            obs, info = self.env.reset()
-            obs_dict = {agent: self._get_vehicle_observation(i) for i, agent in enumerate(self.agents)}
-            info_dict = {agent: info for agent in self.agents}
-
-        return obs_dict, reward_list, terminated, truncated, info_dict
+        return obs_dict, rewards, terminations, truncations, infos
 
     def render(self):
-        self.env.render()
+        return self.env.render()
 
     def close(self):
         self.env.close()
-        
-    # 車両の観測
-    def _get_vehicle_observation(self, index):
-        v = self.core_env.road.vehicles[index]
+
+    def _get_vehicle_observation(self, i):
+        v = self.core_env.road.vehicles[i]
         return np.array([v.position[0], v.position[1], v.speed], dtype=np.float32)
 
-        # 報酬計算
-    def _calc_reward(self, vehicle):
-        reward = 0
-        reward += vehicle.speed / 30.0
-        if vehicle.crashed :
-            reward -= 100
-        return reward
+    def _calc_reward(self, v):
+        r = v.speed / 30.0
+        if getattr(v, "crashed", False):
+            r -= 100.0
+        return float(r)
+
 
 if __name__ == "__main__":
     env = HighwayMultiEnv(num_agents=5)
     obs, info = env.reset()
 
     for _ in range(1000):
-        # 各エージェントがランダムに行動
         actions = {agent: env.env.action_space.sample() for agent in env.agents}
         obs, rewards, terminations, truncations, infos = env.step(actions)
         env.render()
