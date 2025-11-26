@@ -15,4 +15,4 @@ else
 fi
 
 # Pythonスクリプト実行
-python train_highway-merge.py
+python src/train_highway-merge.py
