@@ -2,7 +2,7 @@ from typing import Optional
 import supersuit as ss
 from stable_baselines3 import PPO
 from run_highway import HighwayMultiEnv
-from env_config import train_config, HighwayEnvConfig
+from env_config import env_config, HighwayEnvConfig
 
 
 def make_env(
@@ -14,12 +14,12 @@ def make_env(
     ベクトル化された環境を作成
     
     Args:
-        config: HighwayEnvConfigインスタンス（Noneの場合はtrain_configを使用）
+        config: HighwayEnvConfigインスタンス（Noneの場合はenv_configを使用）
         num_vec_envs: 並列環境数
         num_cpus: 使用するCPU数
     """
     if config is None:
-        config = train_config
+        config = env_config
     
     env = HighwayMultiEnv(config=config)
     env = ss.pettingzoo_env_to_vec_env_v1(env)
@@ -34,8 +34,8 @@ def make_env(
 
 
 if __name__ == "__main__":
-    # 設定ファイルから環境設定を読み込み
-    vec_env = make_env(config=train_config, num_vec_envs=4, num_cpus=4)
+    # 設定ファイルから環境設定を読み込み（学習と推論で同じ設定を使用）
+    vec_env = make_env(config=env_config, num_vec_envs=4, num_cpus=4)
 
     model = PPO(
         "MlpPolicy",
@@ -46,7 +46,7 @@ if __name__ == "__main__":
         learning_rate=3e-4,
     )
 
-    model.learn(total_timesteps=200000)
+    model.learn(total_timesteps=2000000)
     model.save("highway-merge-ppo")
 
     vec_env.close()

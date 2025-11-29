@@ -5,6 +5,20 @@
 
 from dataclasses import dataclass
 from typing import Dict, Any, Optional, Union
+from settings import (
+    ENV_NAME,
+    NUM_AGENTS,
+    RENDER_MODE,
+    VEHICLES_COUNT,
+    CONTROLLED_VEHICLES,
+    OBSERVATION_TYPE,
+    DURATION,
+    OBS_SHAPE,
+    OBS_DTYPE,
+    ACTION_SPACE_SIZE,
+    SPEED_NORMALIZATION,
+    CRASH_PENALTY,
+)
 
 
 @dataclass
@@ -12,26 +26,26 @@ class HighwayEnvConfig:
     """高速道路環境の設定クラス"""
     
     # 環境の基本設定
-    env_name: str = "highway-v0"
-    num_agents: int = 5
-    render_mode: Optional[str] = None  # "human" or None
+    env_name: str = ENV_NAME
+    num_agents: int = NUM_AGENTS
+    render_mode: Optional[str] = RENDER_MODE  # "human" or None
     
     # 環境パラメータ
-    vehicles_count: Optional[int] = None  # Noneの場合はnum_agentsを使用
-    controlled_vehicles: Optional[int] = None  # Noneの場合はnum_agentsを使用
-    observation_type: str = "Kinematics"
-    duration: int = 40
+    vehicles_count: Optional[int] = VEHICLES_COUNT  # Noneの場合はnum_agentsを使用
+    controlled_vehicles: Optional[int] = CONTROLLED_VEHICLES  # Noneの場合はnum_agentsを使用
+    observation_type: str = OBSERVATION_TYPE
+    duration: int = DURATION
     
     # 観測空間の設定
-    obs_shape: tuple = (3,)  # [x位置, y位置, 速度]
-    obs_dtype: str = "float32"
+    obs_shape: tuple = OBS_SHAPE  # [x位置, y位置, 速度]
+    obs_dtype: str = OBS_DTYPE
     
     # 行動空間の設定
-    action_space_size: int = 5  # 0:減速, 1:維持, 2:加速, 3:左レーン変更, 4:右レーン変更
+    action_space_size: int = ACTION_SPACE_SIZE  # 0:減速, 1:維持, 2:加速, 3:左レーン変更, 4:右レーン変更
     
     # 報酬設定
-    speed_normalization: float = 30.0  # 速度の正規化係数
-    crash_penalty: float = -100.0  # 衝突時のペナルティ
+    speed_normalization: float = SPEED_NORMALIZATION  # 速度の正規化係数
+    crash_penalty: float = CRASH_PENALTY  # 衝突時のペナルティ
     
     def get_gym_config(self) -> Dict[str, Any]:
         """gym.make()に渡すconfig辞書を生成"""
@@ -47,20 +61,10 @@ class HighwayEnvConfig:
         return override if override is not None else self.render_mode
 
 
-# デフォルト設定インスタンス
-default_config = HighwayEnvConfig()
+# 共通環境設定インスタンス（学習と推論で同じ設定を使用）
+# 推論時にレンダリングが必要な場合は、HighwayMultiEnvのrender_mode引数で上書き可能
+env_config = HighwayEnvConfig()
 
-# 学習用設定（レンダリングなし）
-train_config = HighwayEnvConfig(
-    num_agents=5,
-    render_mode=None,
-    duration=40,
-)
-
-# 推論用設定（レンダリングあり）
-inference_config = HighwayEnvConfig(
-    num_agents=5,
-    render_mode="human",
-    duration=40,
-)
+# デフォルト設定（後方互換性のため）
+default_config = env_config
 

@@ -2,26 +2,29 @@ from typing import Optional
 import numpy as np
 from stable_baselines3 import PPO
 from run_highway import HighwayMultiEnv
-from env_config import inference_config, HighwayEnvConfig
+from env_config import env_config, HighwayEnvConfig
 
 
 def run_inference(
     model_path: str, 
     config: Optional[HighwayEnvConfig] = None, 
-    max_steps: int = 1000
+    max_steps: int = 1000,
+    render_mode: Optional[str] = "human"
 ) -> None:
     """
     学習済みモデルで推論を実行
     
     Args:
         model_path: 学習済みモデルのパス
-        config: HighwayEnvConfigインスタンス（Noneの場合はinference_configを使用）
+        config: HighwayEnvConfigインスタンス（Noneの場合はenv_configを使用）
         max_steps: 最大ステップ数
+        render_mode: レンダーモード（推論時は"human"を推奨）
     """
     if config is None:
-        config = inference_config
+        config = env_config
     
-    env = HighwayMultiEnv(config=config)
+    # 推論時はレンダリングを有効にする（学習時と同じ環境設定を使用）
+    env = HighwayMultiEnv(config=config, render_mode=render_mode)
     model = PPO.load(model_path)
 
     obs_dict, info = env.reset()
@@ -50,5 +53,5 @@ def run_inference(
 
 
 if __name__ == "__main__":
-    # 設定ファイルから環境設定を読み込み
-    run_inference("highway-merge-ppo", config=inference_config, max_steps=1000)
+    # 設定ファイルから環境設定を読み込み（学習時と同じ設定を使用）
+    run_inference("highway-merge-ppo", config=env_config, max_steps=1000, render_mode="human")
