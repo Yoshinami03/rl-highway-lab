@@ -23,16 +23,12 @@ def make_env(
     
     env = HighwayMultiEnv(config=config)
     env = ss.pettingzoo_env_to_vec_env_v1(env)
-    # 観測空間と行動空間を取得
-    obs_space = env.observation_space
-    act_space = env.action_space
+    # concat_vec_envs_v1は環境から自動的に観測空間と行動空間を取得するため、明示的に渡す必要はない
     env = ss.concat_vec_envs_v1(
         env, 
         num_vec_envs, 
         num_cpus=num_cpus, 
-        base_class="stable_baselines3",
-        obs_space=obs_space,
-        act_space=act_space
+        base_class="stable_baselines3"
     )
     return env
 
