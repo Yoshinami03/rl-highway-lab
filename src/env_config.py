@@ -3,22 +3,70 @@
 このファイルで環境のパラメータを管理します
 """
 
+import os
 from dataclasses import dataclass
-from typing import Dict, Any, Optional, Union
-from settings import (
-    ENV_NAME,
-    NUM_AGENTS,
-    RENDER_MODE,
-    VEHICLES_COUNT,
-    CONTROLLED_VEHICLES,
-    OBSERVATION_TYPE,
-    DURATION,
-    OBS_SHAPE,
-    OBS_DTYPE,
-    ACTION_SPACE_SIZE,
-    SPEED_NORMALIZATION,
-    CRASH_PENALTY,
-)
+from typing import Dict, Any, Optional, Union, Tuple
+
+# .envファイルから環境変数を読み込む
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    # python-dotenvがインストールされていない場合は環境変数のみを使用
+    pass
+
+
+def get_env_str(key: str, default: str = "") -> str:
+    """環境変数を文字列として取得"""
+    return os.getenv(key, default).strip()
+
+
+def get_env_int(key: str, default: int = 0) -> int:
+    """環境変数を整数として取得"""
+    value = get_env_str(key)
+    return int(value) if value else default
+
+
+def get_env_float(key: str, default: float = 0.0) -> float:
+    """環境変数を浮動小数点数として取得"""
+    value = get_env_str(key)
+    return float(value) if value else default
+
+
+def get_env_optional_int(key: str) -> Optional[int]:
+    """環境変数をオプショナル整数として取得（空欄の場合はNone）"""
+    value = get_env_str(key)
+    return int(value) if value else None
+
+
+def get_env_tuple(key: str, default: Tuple[int, ...] = (3,)) -> Tuple[int, ...]:
+    """環境変数をタプルとして取得（カンマ区切り）"""
+    value = get_env_str(key)
+    if not value:
+        return default
+    try:
+        # カンマ区切りの場合は分割、そうでない場合は単一値
+        if ',' in value:
+            return tuple(int(x.strip()) for x in value.split(','))
+        else:
+            return (int(value),)
+    except ValueError:
+        return default
+
+
+# 環境変数から設定を読み込む
+ENV_NAME = get_env_str("ENV_NAME", "merge-v0")
+NUM_AGENTS = get_env_int("NUM_AGENTS", 5)
+RENDER_MODE = get_env_str("RENDER_MODE") or None
+VEHICLES_COUNT = get_env_optional_int("VEHICLES_COUNT")
+CONTROLLED_VEHICLES = get_env_optional_int("CONTROLLED_VEHICLES")
+OBSERVATION_TYPE = get_env_str("OBSERVATION_TYPE", "Kinematics")
+DURATION = get_env_int("DURATION", 40)
+OBS_SHAPE = get_env_tuple("OBS_SHAPE", (3,))
+OBS_DTYPE = get_env_str("OBS_DTYPE", "float32")
+ACTION_SPACE_SIZE = get_env_int("ACTION_SPACE_SIZE", 5)
+SPEED_NORMALIZATION = get_env_float("SPEED_NORMALIZATION", 30.0)
+CRASH_PENALTY = get_env_float("CRASH_PENALTY", -100.0)
 
 
 @dataclass
