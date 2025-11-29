@@ -2,7 +2,7 @@ from typing import Optional
 import numpy as np
 from stable_baselines3 import PPO
 from run_highway import HighwayMultiEnv
-from env_config import env_config, HighwayEnvConfig
+from env_config import env_config, HighwayEnvConfig, MODEL_NAME, MAX_STEPS
 
 
 def run_inference(
@@ -54,4 +54,4 @@ def run_inference(
 
 if __name__ == "__main__":
     # 設定ファイルから環境設定を読み込み（学習時と同じ設定を使用）
-    run_inference("highway-merge-ppo", config=env_config, max_steps=1000, render_mode="human")
+    run_inference(MODEL_NAME, config=env_config, max_steps=MAX_STEPS, render_mode="human")

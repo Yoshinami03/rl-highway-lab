@@ -71,6 +71,23 @@ CRASH_PENALTY = get_env_float("CRASH_PENALTY", -100.0)
 # 学習設定
 TOTAL_TIMESTEPS = get_env_int("TOTAL_TIMESTEPS", 2000000)
 
+# モデル設定
+MODEL_NAME = get_env_str("MODEL_NAME", "highway-merge-ppo")
+
+# 学習ハイパーパラメータ
+PPO_POLICY = get_env_str("PPO_POLICY", "MlpPolicy")
+PPO_VERBOSE = get_env_int("PPO_VERBOSE", 1)
+PPO_N_STEPS = get_env_int("PPO_N_STEPS", 1024)
+PPO_BATCH_SIZE = get_env_int("PPO_BATCH_SIZE", 256)
+PPO_LEARNING_RATE = get_env_float("PPO_LEARNING_RATE", 0.0003)
+
+# ベクトル化環境設定
+NUM_VEC_ENVS = get_env_int("NUM_VEC_ENVS", 4)
+NUM_CPUS = get_env_int("NUM_CPUS", 4)
+
+# 推論設定
+MAX_STEPS = get_env_int("MAX_STEPS", 1000)
+
 
 @dataclass
 class HighwayEnvConfig:
