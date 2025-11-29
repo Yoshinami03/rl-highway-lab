@@ -68,6 +68,9 @@ ACTION_SPACE_SIZE = get_env_int("ACTION_SPACE_SIZE", 5)
 SPEED_NORMALIZATION = get_env_float("SPEED_NORMALIZATION", 30.0)
 CRASH_PENALTY = get_env_float("CRASH_PENALTY", -100.0)
 
+# 学習設定
+TOTAL_TIMESTEPS = get_env_int("TOTAL_TIMESTEPS", 2000000)
+
 
 @dataclass
 class HighwayEnvConfig:

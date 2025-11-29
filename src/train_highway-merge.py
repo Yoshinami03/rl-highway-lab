@@ -2,7 +2,7 @@ from typing import Optional
 import supersuit as ss
 from stable_baselines3 import PPO
 from run_highway import HighwayMultiEnv
-from env_config import env_config, HighwayEnvConfig
+from env_config import env_config, HighwayEnvConfig, TOTAL_TIMESTEPS
 
 
 def make_env(
@@ -46,7 +46,7 @@ if __name__ == "__main__":
         learning_rate=3e-4,
     )
 
-    model.learn(total_timesteps=2000000)
+    model.learn(total_timesteps=TOTAL_TIMESTEPS)
     model.save("highway-merge-ppo")
 
     vec_env.close()
