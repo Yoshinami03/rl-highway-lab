@@ -211,3 +211,9 @@ HighwayEnv_Merge/
 .venv/
 env/
 _pycache_/
+
+# 学習済みモデルファイル
+highway-merge-ppo*
+*.zip
+*-ppo/
+*-ppo.zip
