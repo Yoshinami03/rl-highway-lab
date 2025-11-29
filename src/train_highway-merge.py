@@ -1,10 +1,15 @@
+from typing import Optional
 import supersuit as ss
 from stable_baselines3 import PPO
 from run_highway import HighwayMultiEnv
-from env_config import train_config
+from env_config import train_config, HighwayEnvConfig
 
 
-def make_env(config=None, num_vec_envs: int = 4, num_cpus: int = 4):
+def make_env(
+    config: Optional[HighwayEnvConfig] = None, 
+    num_vec_envs: int = 4, 
+    num_cpus: int = 4
+):
     """
     ベクトル化された環境を作成
     

@@ -4,7 +4,7 @@
 """
 
 from dataclasses import dataclass
-from typing import Dict, Any
+from typing import Dict, Any, Optional, Union
 
 
 @dataclass
@@ -14,11 +14,11 @@ class HighwayEnvConfig:
     # 環境の基本設定
     env_name: str = "highway-v0"
     num_agents: int = 5
-    render_mode: str = None  # "human" or None
+    render_mode: Optional[str] = None  # "human" or None
     
     # 環境パラメータ
-    vehicles_count: int = None  # Noneの場合はnum_agentsを使用
-    controlled_vehicles: int = None  # Noneの場合はnum_agentsを使用
+    vehicles_count: Optional[int] = None  # Noneの場合はnum_agentsを使用
+    controlled_vehicles: Optional[int] = None  # Noneの場合はnum_agentsを使用
     observation_type: str = "Kinematics"
     duration: int = 40
     
@@ -42,7 +42,7 @@ class HighwayEnvConfig:
             "duration": self.duration,
         }
     
-    def get_render_mode(self, override: str = None) -> str:
+    def get_render_mode(self, override: Optional[str] = None) -> Optional[str]:
         """レンダーモードを取得（overrideがあれば優先）"""
         return override if override is not None else self.render_mode
 

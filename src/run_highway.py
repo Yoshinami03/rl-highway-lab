@@ -1,3 +1,4 @@
+from typing import Dict, List, Optional, Tuple, Union
 from pettingzoo.utils import ParallelEnv
 import gymnasium as gym
 import numpy as np
@@ -9,7 +10,12 @@ from env_config import HighwayEnvConfig, default_config
 class HighwayMultiEnv(ParallelEnv):
     metadata = {"render_modes": ["human", "rgb_array"], "name": "highway_multi_merge", "is_parallel": True}
 
-    def __init__(self, config: HighwayEnvConfig = None, num_agents: int = None, render_mode: str = None):
+    def __init__(
+        self, 
+        config: Optional[HighwayEnvConfig] = None, 
+        num_agents: Optional[int] = None, 
+        render_mode: Optional[str] = None
+    ):
         """
         初期化
         
@@ -53,24 +59,37 @@ class HighwayMultiEnv(ParallelEnv):
         self.action_spaces = {a: act_space for a in self.possible_agents}
         self.agents = []
 
-    def observation_space(self, agent):
+    def observation_space(self, agent: str) -> spaces.Space:
         return self.observation_spaces[agent]
 
-    def action_space(self, agent):
+    def action_space(self, agent: str) -> spaces.Space:
         return self.action_spaces[agent]
 
     @property
     def unwrapped(self):
         return self
 
-    def reset(self, seed=None, options=None):
+    def reset(
+        self, 
+        seed: Optional[int] = None, 
+        options: Optional[Dict] = None
+    ) -> Tuple[Dict[str, np.ndarray], Dict[str, Dict]]:
         obs, info = self.env.reset(seed=seed, options=options)
         self.agents = self.possible_agents[:]
         obs_dict = {a: self._get_vehicle_observation(i) for i, a in enumerate(self.agents)}
         info_dict = {a: {} for a in self.agents}
         return obs_dict, info_dict
 
-    def step(self, actions):
+    def step(
+        self, 
+        actions: Dict[str, int]
+    ) -> Tuple[
+        Dict[str, np.ndarray], 
+        Dict[str, float], 
+        Dict[str, bool], 
+        Dict[str, bool], 
+        Dict[str, Dict]
+    ]:
         for i, a in enumerate(self.agents):
             action = actions.get(a, 1)
             v = self.core_env.road.vehicles[i]
@@ -106,20 +125,20 @@ class HighwayMultiEnv(ParallelEnv):
 
         return obs_dict, rewards, terminations, truncations, infos
 
-    def render(self):
+    def render(self) -> Optional[np.ndarray]:
         return self.env.render()
 
-    def close(self):
+    def close(self) -> None:
         self.env.close()
 
-    def _get_vehicle_observation(self, i):
+    def _get_vehicle_observation(self, i: int) -> np.ndarray:
         if i >= len(self.core_env.road.vehicles):
             return np.zeros(self.config.obs_shape[0], dtype=getattr(np, self.config.obs_dtype))
             
         v = self.core_env.road.vehicles[i]
         return np.array([v.position[0], v.position[1], v.speed], dtype=getattr(np, self.config.obs_dtype))
 
-    def _calc_reward(self, v):
+    def _calc_reward(self, v) -> float:
         r = v.speed / self.config.speed_normalization
         if getattr(v, "crashed", False):
             r += self.config.crash_penalty

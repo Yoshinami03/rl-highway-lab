@@ -1,10 +1,15 @@
+from typing import Optional
 import numpy as np
 from stable_baselines3 import PPO
 from run_highway import HighwayMultiEnv
 from env_config import inference_config, HighwayEnvConfig
 
 
-def run_inference(model_path: str, config: HighwayEnvConfig = None, max_steps: int = 1000):
+def run_inference(
+    model_path: str, 
+    config: Optional[HighwayEnvConfig] = None, 
+    max_steps: int = 1000
+) -> None:
     """
     学習済みモデルで推論を実行
     
