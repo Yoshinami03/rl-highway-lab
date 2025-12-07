@@ -55,7 +55,8 @@ def get_env_tuple(key: str, default: Tuple[int, ...] = (3,)) -> Tuple[int, ...]:
 
 
 # 環境変数から設定を読み込む
-ENV_NAME = get_env_str("ENV_NAME", "merge-v0")
+# カスタム環境を使用する場合は"merge-v0-custom"を指定
+ENV_NAME = get_env_str("ENV_NAME", "merge-v0-custom")
 NUM_AGENTS = get_env_int("NUM_AGENTS", 5)
 RENDER_MODE = get_env_str("RENDER_MODE") or None
 VEHICLES_COUNT = get_env_optional_int("VEHICLES_COUNT")
@@ -88,6 +89,16 @@ NUM_CPUS = get_env_int("NUM_CPUS", 4)
 # 推論設定
 MAX_STEPS = get_env_int("MAX_STEPS", 1000)
 
+# カメラ設定（合流地点に固定視点）
+CAMERA_POSITION_X = get_env_float("CAMERA_POSITION_X", 230.0)  # 合流地点のX座標
+CAMERA_POSITION_Y = get_env_float("CAMERA_POSITION_Y", 0.0)    # 道路中央
+CAMERA_ZOOM = get_env_float("CAMERA_ZOOM", 50.0)                # 視野の広さ
+
+# 車両生成設定
+VEHICLE_SPAWN_INTERVAL = get_env_float("VEHICLE_SPAWN_INTERVAL", 5.0)  # 車両生成間隔（秒）
+VEHICLE_SPAWN_POSITION_X = get_env_float("VEHICLE_SPAWN_POSITION_X", 0.0)  # 生成位置X座標
+TIME_STEP = get_env_float("TIME_STEP", 0.1)  # 1ステップの時間（秒）
+
 
 @dataclass
 class HighwayEnvConfig:
@@ -114,6 +125,16 @@ class HighwayEnvConfig:
     # 報酬設定
     speed_normalization: float = SPEED_NORMALIZATION  # 速度の正規化係数
     crash_penalty: float = CRASH_PENALTY  # 衝突時のペナルティ
+    
+    # カメラ設定
+    camera_position_x: float = CAMERA_POSITION_X
+    camera_position_y: float = CAMERA_POSITION_Y
+    camera_zoom: float = CAMERA_ZOOM
+    
+    # 車両生成設定
+    vehicle_spawn_interval: float = VEHICLE_SPAWN_INTERVAL
+    vehicle_spawn_position_x: float = VEHICLE_SPAWN_POSITION_X
+    time_step: float = TIME_STEP
     
     def get_gym_config(self) -> Dict[str, Any]:
         """gym.make()に渡すconfig辞書を生成"""
