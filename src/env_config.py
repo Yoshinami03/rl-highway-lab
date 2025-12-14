@@ -70,6 +70,9 @@ CRASH_PENALTY = get_env_float("CRASH_PENALTY", -100.0)
 
 # カメラズーム
 CAMERA_ZOOM = get_env_float("CAMERA_ZOOM", 5.0)
+# カメラ位置
+CAMERA_POSITION_X = get_env_float("CAMERA_POSITION_X", 150.0)
+CAMERA_POSITION_Y = get_env_float("CAMERA_POSITION_Y", 4.0)
 
 # シミュレーション設定
 SIMULATION_FREQUENCY = get_env_int("SIMULATION_FREQUENCY", 5)  # 低くすると進行がゆっくりになる
@@ -124,8 +127,10 @@ class HighwayEnvConfig:
     # 時間設定
     simulation_frequency: int = SIMULATION_FREQUENCY
 
-    # カメラ設定（ズームのみ）
+    # カメラ設定
     camera_zoom: float = CAMERA_ZOOM
+    camera_position_x: float = CAMERA_POSITION_X
+    camera_position_y: float = CAMERA_POSITION_Y
     
     def get_gym_config(self) -> Dict[str, Any]:
         """gym.make()に渡すconfig辞書を生成"""
@@ -137,6 +142,7 @@ class HighwayEnvConfig:
             "simulation_frequency": self.simulation_frequency,
             "real_time_rendering": True,  # viewerのtickを有効化して実時間描画
             "scaling": self.camera_zoom,  # ズーム倍率（数値を下げると広く見える）
+            "centering_position": [self.camera_position_x, self.camera_position_y],  # カメラ中心位置
         }
     
     def get_render_mode(self, override: Optional[str] = None) -> Optional[str]:
