@@ -68,6 +68,9 @@ ACTION_SPACE_SIZE = get_env_int("ACTION_SPACE_SIZE", 5)
 SPEED_NORMALIZATION = get_env_float("SPEED_NORMALIZATION", 30.0)
 CRASH_PENALTY = get_env_float("CRASH_PENALTY", -100.0)
 
+# シミュレーション設定
+SIMULATION_FREQUENCY = get_env_int("SIMULATION_FREQUENCY", 5)  # 低くすると進行がゆっくりになる
+
 # 学習設定
 TOTAL_TIMESTEPS = get_env_int("TOTAL_TIMESTEPS", 2000000)
 
@@ -114,6 +117,9 @@ class HighwayEnvConfig:
     # 報酬設定
     speed_normalization: float = SPEED_NORMALIZATION  # 速度の正規化係数
     crash_penalty: float = CRASH_PENALTY  # 衝突時のペナルティ
+
+    # 時間設定
+    simulation_frequency: int = SIMULATION_FREQUENCY
     
     def get_gym_config(self) -> Dict[str, Any]:
         """gym.make()に渡すconfig辞書を生成"""
@@ -122,6 +128,8 @@ class HighwayEnvConfig:
             "controlled_vehicles": self.controlled_vehicles or self.num_agents,
             "observation": {"type": self.observation_type},
             "duration": self.duration,
+            "simulation_frequency": self.simulation_frequency,
+            "real_time_rendering": True,  # viewerのtickを有効化して実時間描画
         }
     
     def get_render_mode(self, override: Optional[str] = None) -> Optional[str]:
