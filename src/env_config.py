@@ -77,6 +77,11 @@ CAMERA_POSITION_Y = get_env_float("CAMERA_POSITION_Y", 4.0)
 # シミュレーション設定
 SIMULATION_FREQUENCY = get_env_int("SIMULATION_FREQUENCY", 5)  # 低くすると進行がゆっくりになる
 
+# 推論専用の上書き設定（未設定ならNone）
+INFER_NUM_AGENTS = get_env_optional_int("INFER_NUM_AGENTS")
+INFER_CONTROLLED_VEHICLES = get_env_optional_int("INFER_CONTROLLED_VEHICLES")
+INFER_VEHICLES_COUNT = get_env_optional_int("INFER_VEHICLES_COUNT")
+
 # 学習設定
 TOTAL_TIMESTEPS = get_env_int("TOTAL_TIMESTEPS", 2000000)
 

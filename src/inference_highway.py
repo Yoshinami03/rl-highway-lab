@@ -1,6 +1,8 @@
 from typing import Optional
 import numpy as np
 from stable_baselines3 import PPO
+import copy
+from env_config import env_config, HighwayEnvConfig, MODEL_NAME, MAX_STEPS, INFER_NUM_AGENTS, INFER_CONTROLLED_VEHICLES, INFER_VEHICLES_COUNT
 from run_highway import HighwayMultiEnv
 from env_config import env_config, HighwayEnvConfig, MODEL_NAME, MAX_STEPS
 
@@ -9,7 +11,8 @@ def run_inference(
     model_path: str, 
     config: Optional[HighwayEnvConfig] = None, 
     max_steps: int = 1000,
-    render_mode: Optional[str] = "human"
+    render_mode: Optional[str] = "human",
+    num_agents: Optional[int] = None,
 ) -> None:
     """
     学習済みモデルで推論を実行
@@ -20,11 +23,23 @@ def run_inference(
         max_steps: 最大ステップ数
         render_mode: レンダーモード（推論時は"human"を推奨）
     """
-    if config is None:
-        config = env_config
-    
+    # 設定は推論用にコピーして上書きする（学習設定を汚さない）
+    cfg = copy.deepcopy(config if config is not None else env_config)
+
+    # 優先順位: 引数 num_agents > 環境変数 INFER_NUM_AGENTS > 元設定
+    if num_agents is not None:
+        cfg.num_agents = num_agents
+    elif INFER_NUM_AGENTS is not None:
+        cfg.num_agents = INFER_NUM_AGENTS
+
+    # controlled_vehicles / vehicles_count も推論専用上書きがあれば適用
+    if INFER_CONTROLLED_VEHICLES is not None:
+        cfg.controlled_vehicles = INFER_CONTROLLED_VEHICLES
+    if INFER_VEHICLES_COUNT is not None:
+        cfg.vehicles_count = INFER_VEHICLES_COUNT
+
     # 推論時はレンダリングを有効にする（学習時と同じ環境設定を使用）
-    env = HighwayMultiEnv(config=config, render_mode=render_mode)
+    env = HighwayMultiEnv(config=cfg, num_agents=cfg.num_agents, render_mode=render_mode)
     model = PPO.load(model_path)
 
     obs_dict, info = env.reset()

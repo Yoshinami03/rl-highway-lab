@@ -4,6 +4,8 @@ import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
 import highway_env
+from highway_env.vehicle.kinematics import Vehicle
+from highway_env.vehicle.controller import ControlledVehicle
 from env_config import HighwayEnvConfig, default_config
 
 
@@ -135,6 +137,22 @@ class HighwayMultiEnv(ParallelEnv):
         # controlled vehiclesを再取得（reset後に更新される）
         self._controlled_vehicles = None
         controlled = self._get_controlled_vehicles()
+
+        # 目標台数（NUM_AGENTS と vehicles_count の最大）
+        target = max(self._num_agents, self.config.vehicles_count or 0)
+
+        # 車両数を target 以上に補う（road.vehicles）
+        self._ensure_vehicle_count(target)
+
+        # controlled が target 未満なら追加生成
+        controlled = self._get_controlled_vehicles()
+        if len(controlled) < target:
+            self._add_controlled_vehicles(target - len(controlled))
+            controlled = self._get_controlled_vehicles()
+
+        # controlled を NUM_AGENTS に合わせて切り詰め（超過時）
+        if len(controlled) > self._num_agents:
+            self._controlled_vehicles = controlled[:self._num_agents]
         
         # エージェント数は固定（変更しない）
         # controlled vehicles数が足りない場合は警告を出すが、エージェント数は維持
@@ -183,6 +201,8 @@ class HighwayMultiEnv(ParallelEnv):
             action = actions.get(a, 1)
             # エージェントiが制御する車両を取得（各エージェントは自分の車両のみを制御）
             v = controlled[i]
+            if not hasattr(v, "target_lane_index"):
+                continue  # target_lane_indexがない車両はスキップ
             if action == 0:
                 v.target_speed = max(0.0, v.target_speed - 1.0)
             elif action == 2:
@@ -224,9 +244,18 @@ class HighwayMultiEnv(ParallelEnv):
         # 各エージェントの観測を生成（各エージェントは自分の観測のみを受け取る）
         obs_dict = {a: self._get_vehicle_observation(i) for i, a in enumerate(self.agents)}
         
-        # 各エージェントの報酬を計算（各エージェントは自分の報酬のみを受け取る）
-        rewards = {a: self._calc_reward(controlled[i] if i < len(controlled) else self.core_env.road.vehicles[i]) 
-                   for i, a in enumerate(self.agents)}
+        # 各エージェントの報酬を計算（車両が足りない場合は0で埋める）
+        rewards = {}
+        max_len = max(len(controlled), len(self.core_env.road.vehicles))
+        for i, a in enumerate(self.agents):
+            if i < len(controlled):
+                v = controlled[i]
+            elif i < len(self.core_env.road.vehicles):
+                v = self.core_env.road.vehicles[i]
+            else:
+                rewards[a] = 0.0
+                continue
+            rewards[a] = self._calc_reward(v)
         
         # 終了条件を各エージェントに配布
         terminations = {a: bool(term) for a in self.agents}
@@ -378,3 +407,69 @@ class HighwayMultiEnv(ParallelEnv):
                             r -= 5.0
         
         return float(r)
+
+    def _ensure_vehicle_count(self, target: Optional[int] = None) -> None:
+        """target 台数以上の車両が存在するように補充する"""
+        if target is None:
+            target = max(self._num_agents, self.config.vehicles_count or self._num_agents)
+
+        # 参照用のベース車両（先頭がなければ作らない）
+        if not self.core_env.road.vehicles:
+            return
+        base = self.core_env.road.vehicles[0]
+
+        while len(self.core_env.road.vehicles) < target:
+            # 既存車両の少し後方に複製して配置（簡易配置）
+            offset = -5.0 * (len(self.core_env.road.vehicles) - 0)
+            new_pos = np.array(base.position) + np.array([offset, 0.0])
+            new_vehicle = ControlledVehicle(
+                self.core_env.road,
+                position=new_pos,
+                heading=base.heading if hasattr(base, "heading") else 0.0,
+                speed=base.speed if hasattr(base, "speed") else 0.0,
+            )
+            new_vehicle.target_lane_index = getattr(base, "target_lane_index", None)
+            self.core_env.road.vehicles.append(new_vehicle)
+
+    def _add_controlled_vehicles(self, count: int) -> None:
+        """不足しているcontrolled vehiclesを追加生成する（ランダムレーンでスポーン）"""
+        if count <= 0:
+            return
+
+        road = self.core_env.road
+        net = road.network
+
+        # 利用可能なレーンを取得（3要素タプルのみを対象）
+        lane_keys = [k for k in net.graph.keys() if isinstance(k, tuple) and len(k) == 3]
+        if not lane_keys:
+            return
+
+        # ベース速度（先頭車両があればそれを使う）
+        base_speed = 20.0
+        if road.vehicles:
+            base_speed = getattr(road.vehicles[0], "speed", base_speed)
+
+        if self._controlled_vehicles is None:
+            self._controlled_vehicles = []
+
+        import random
+        for _ in range(count):
+            lane_key = random.choice(lane_keys)
+            lane = net.get_lane(lane_key)
+
+            # レーン始点付近にばらつきを持たせてスポーン（0〜30m の範囲）
+            x = random.uniform(0, 30.0)
+            position = lane.position(x, 0)
+            heading = lane.heading_at(x)
+
+            v = ControlledVehicle(
+                road,
+                position=position,
+                heading=heading,
+                speed=base_speed,
+            )
+            # レーンは選択したlane_key
+            v.target_lane_index = lane_key
+
+            road.vehicles.append(v)
+            self._controlled_vehicles.append(v)
