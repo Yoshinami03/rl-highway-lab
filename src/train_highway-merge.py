@@ -25,10 +25,20 @@ def make_env(
     """
     ベクトル化された環境を作成
     
+    この関数は、マルチエージェント環境を各エージェントが独立に学習できる形に変換します。
+    pettingzoo_env_to_vec_env_v1() は各エージェントを個別の環境インスタンスとして扱い、
+    同じモデル（PPO）を各エージェントに適用することで、協調行動を学習させます。
+    
     Args:
         config: HighwayEnvConfigインスタンス（Noneの場合はenv_configを使用）
         num_vec_envs: 並列環境数（Noneの場合はNUM_VEC_ENVSを使用）
         num_cpus: 使用するCPU数（Noneの場合はNUM_CPUSを使用）
+    
+    注意:
+        - 学習モデルは1台分のもの（単一のPPOモデル）
+        - 各エージェントは同じモデルを使用して独立に行動を決定
+        - 各エージェントは自分の観測のみを見て、自分の行動を決定
+        - これにより、同じモデルを複製して使う形になり、協調行動が自然に生まれる
     """
     if config is None:
         config = env_config
@@ -37,8 +47,16 @@ def make_env(
     if num_cpus is None:
         num_cpus = NUM_CPUS
     
+    # マルチエージェント環境を作成
     env = HighwayMultiEnv(config=config)
+    
+    # PettingZooのParallelEnvをVecEnvに変換
+    # この変換により、各エージェントが個別の環境インスタンスとして扱われる
+    # 観測shape: (num_agents, obs_dim) - 各エージェントの観測が並ぶ
+    # 行動shape: (num_agents,) - 各エージェントの行動が並ぶ
     env = ss.pettingzoo_env_to_vec_env_v1(env)
+    
+    # 複数の環境インスタンスを並列実行（データ収集の高速化）
     env = ss.concat_vec_envs_v1(
         env, 
         num_vec_envs, 
