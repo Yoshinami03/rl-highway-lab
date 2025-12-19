@@ -1,10 +1,19 @@
+import os
+import sys
 from typing import Optional
 import numpy as np
 from stable_baselines3 import PPO
 import copy
+
+# src 配下のローカル highway_env を優先して import する
+_SRC_DIR = os.path.dirname(os.path.abspath(__file__))
+_LOCAL_HE_PATH = os.path.join(_SRC_DIR, "highway_env")
+for _p in (_LOCAL_HE_PATH, _SRC_DIR):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
 from env_config import env_config, HighwayEnvConfig, MODEL_NAME, MAX_STEPS, INFER_NUM_AGENTS, INFER_CONTROLLED_VEHICLES, INFER_VEHICLES_COUNT
 from run_highway import HighwayMultiEnv
-from env_config import env_config, HighwayEnvConfig, MODEL_NAME, MAX_STEPS
 
 
 def run_inference(

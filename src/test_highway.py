@@ -3,12 +3,22 @@
 学習済みモデルのパフォーマンスを複数エピソードで評価し、統計を出力します。
 """
 
+import os
+import sys
 import argparse
 import json
 from typing import Optional, Dict, List
 from dataclasses import dataclass, asdict
 import numpy as np
 from stable_baselines3 import PPO
+
+# src 配下のローカル highway_env を優先して import する
+_SRC_DIR = os.path.dirname(os.path.abspath(__file__))
+_LOCAL_HE_PATH = os.path.join(_SRC_DIR, "highway_env")
+for _p in (_LOCAL_HE_PATH, _SRC_DIR):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
 from run_highway import HighwayMultiEnv
 from env_config import env_config, HighwayEnvConfig, MODEL_NAME, MAX_STEPS
 

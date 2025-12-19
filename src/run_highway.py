@@ -1,8 +1,18 @@
+import os
+import sys
 from typing import Dict, List, Optional, Tuple, Union
 from pettingzoo.utils import ParallelEnv
 import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
+
+# src 配下のローカル highway_env を優先して import する
+_SRC_DIR = os.path.dirname(os.path.abspath(__file__))
+_LOCAL_HE_PATH = os.path.join(_SRC_DIR, "highway_env")
+for _p in (_LOCAL_HE_PATH, _SRC_DIR):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
 import highway_env
 from highway_env.vehicle.kinematics import Vehicle
 from highway_env.vehicle.controller import ControlledVehicle
