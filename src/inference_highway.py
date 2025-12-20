@@ -34,6 +34,10 @@ def run_inference(
     """
     # 設定は推論用にコピーして上書きする（学習設定を汚さない）
     cfg = copy.deepcopy(config if config is not None else env_config)
+    
+    # ★ 既存モデル（3次元観測空間）との互換性のため、観測空間を3次元に設定 ★
+    # 新しい17次元観測空間で学習したモデルを使う場合は、この行をコメントアウトしてください
+    cfg.obs_shape = (3,)
 
     # 優先順位: 引数 num_agents > 環境変数 INFER_NUM_AGENTS > 元設定
     if num_agents is not None:

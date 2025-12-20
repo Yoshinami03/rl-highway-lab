@@ -36,41 +36,71 @@ class MergeEnv(AbstractEnv):
 
     def _reward(self, action: int) -> float:
         """
-        The vehicle is rewarded for driving with high speed on lanes to the right and avoiding collisions
-
-        But an additional altruistic penalty is also suffered if any vehicle on the merging lane has a low speed.
+        全車両の報酬を合計して返す（各車両に同じ値を配る）
+        
+        報酬項目:
+        - 衝突ペナルティ（全車両分）
+        - ゴール報酬（x > 370）
+        - 合流レーンからのゴール追加報酬
+        - 速度報酬（全車両の平均速度）
 
         :param action: the action performed
-        :return: the reward of the state-action transition
+        :return: the total reward shared across all vehicles
         """
-        reward = sum(
-            self.config.get(name, 0) * reward
-            for name, reward in self._rewards(action).items()
-        )
-        return utils.lmap(
-            reward,
-            [
-                self.config["collision_reward"] + self.config["merging_speed_reward"],
-                self.config["high_speed_reward"] + self.config["right_lane_reward"],
-            ],
-            [0, 1],
-        )
+        total_reward = 0.0
+        goal_position = 370.0
+        
+        # 全車両をチェック
+        num_vehicles = len(self.road.vehicles)
+        total_speed = 0.0
+        collision_count = 0
+        goal_count = 0
+        merge_lane_goal_count = 0
+        
+        for vehicle in self.road.vehicles:
+            # 衝突ペナルティ
+            if getattr(vehicle, 'crashed', False):
+                collision_count += 1
+            
+            # ゴール判定
+            if hasattr(vehicle, 'position') and vehicle.position[0] > goal_position:
+                goal_count += 1
+                # 合流レーンからのゴールは追加ボーナス
+                if hasattr(vehicle, 'lane_index') and vehicle.lane_index:
+                    # 合流レーン（"j", "k"または"b", "c"のforbidden lane）からのゴール
+                    road_id = vehicle.lane_index[0]
+                    if road_id in ["j", "k"]:
+                        merge_lane_goal_count += 1
+            
+            # 速度を累積
+            if hasattr(vehicle, 'speed'):
+                total_speed += vehicle.speed
+        
+        # 報酬計算
+        # 衝突ペナルティ: -100 per collision
+        total_reward += collision_count * (-100.0)
+        
+        # ゴール報酬: +50 per goal
+        total_reward += goal_count * 50.0
+        
+        # 合流レーンからのゴール追加報酬: +30
+        total_reward += merge_lane_goal_count * 30.0
+        
+        # 速度報酬: 平均速度に基づく（0-30 m/s を 0-10 にスケール）
+        if num_vehicles > 0:
+            avg_speed = total_speed / num_vehicles
+            speed_reward = (avg_speed / 30.0) * 10.0
+            total_reward += speed_reward
+        
+        return total_reward
 
     def _rewards(self, action: int) -> dict[str, float]:
-        scaled_speed = utils.lmap(
-            self.vehicle.speed, self.config["reward_speed_range"], [0, 1]
-        )
+        """
+        報酬の詳細を辞書で返す（互換性のため残す）
+        """
+        total_reward = self._reward(action)
         return {
-            "collision_reward": self.vehicle.crashed,
-            "right_lane_reward": self.vehicle.lane_index[2] / 1,
-            "high_speed_reward": scaled_speed,
-            "lane_change_reward": action in [0, 2],
-            "merging_speed_reward": sum(  # Altruistic penalty
-                (vehicle.target_speed - vehicle.speed) / vehicle.target_speed
-                for vehicle in self.road.vehicles
-                if vehicle.lane_index == ("b", "c", 2)
-                and isinstance(vehicle, ControlledVehicle)
-            ),
+            "total_shared_reward": total_reward,
         }
 
     def _is_terminated(self) -> bool:
@@ -79,6 +109,114 @@ class MergeEnv(AbstractEnv):
 
     def _is_truncated(self) -> bool:
         return False
+
+    def _get_nearest_vehicle_info(self, vehicle, direction: str, lane_offset: int) -> tuple[float, float]:
+        """
+        指定方向・レーンオフセットの最も近い車両の距離と速度を取得
+        
+        Args:
+            vehicle: 基準車両
+            direction: "front" or "back"
+            lane_offset: 0（同一レーン）, -1（左）, +1（右）
+        
+        Returns:
+            (distance, speed): 車両なしなら (200.0, 0.0)
+        """
+        if not hasattr(vehicle, 'lane_index') or not vehicle.lane_index:
+            return (200.0, 0.0)
+        
+        # 対象レーンを計算
+        road, start, lane = vehicle.lane_index
+        target_lane = lane + lane_offset
+        
+        # レーンが存在するかチェック
+        try:
+            target_lane_obj = self.road.network.get_lane((road, start, target_lane))
+        except (KeyError, IndexError):
+            return (200.0, 0.0)
+        
+        v_pos = np.array(vehicle.position)
+        min_distance = 200.0
+        target_speed = 0.0
+        
+        for other in self.road.vehicles:
+            if other is vehicle:
+                continue
+            
+            if not hasattr(other, 'lane_index') or not other.lane_index:
+                continue
+            
+            # 同じレーンかチェック
+            if other.lane_index != (road, start, target_lane):
+                continue
+            
+            other_pos = np.array(other.position)
+            dx = other_pos[0] - v_pos[0]
+            
+            # 方向チェック
+            if direction == "front" and dx <= 0:
+                continue
+            if direction == "back" and dx >= 0:
+                continue
+            
+            distance = abs(dx)
+            if distance < min_distance:
+                min_distance = distance
+                target_speed = float(other.speed)
+        
+        return (min_distance, target_speed)
+
+    def _check_lane_available(self, vehicle, lane_offset: int) -> bool:
+        """
+        指定レーンオフセットのレーンに移動可能かチェック
+        
+        Args:
+            vehicle: 基準車両
+            lane_offset: -1（左）, +1（右）
+        
+        Returns:
+            移動可能ならTrue
+        """
+        if not hasattr(vehicle, 'lane_index') or not vehicle.lane_index:
+            return False
+        
+        road, start, lane = vehicle.lane_index
+        target_lane = lane + lane_offset
+        
+        # レーンが存在するかチェック
+        try:
+            target_lane_obj = self.road.network.get_lane((road, start, target_lane))
+            return True
+        except (KeyError, IndexError):
+            return False
+
+    def _get_dead_end_info(self, vehicle) -> tuple[bool, float]:
+        """
+        行き止まり情報を取得
+        
+        Args:
+            vehicle: 基準車両
+        
+        Returns:
+            (is_dead_end, distance): 行き止まりフラグと距離
+        """
+        if not hasattr(vehicle, 'lane_index') or not vehicle.lane_index:
+            return (False, 1000.0)
+        
+        # 合流レーン（forbidden=True）にいる場合は行き止まり扱い
+        try:
+            current_lane = self.road.network.get_lane(vehicle.lane_index)
+            if hasattr(current_lane, 'forbidden') and current_lane.forbidden:
+                # 合流レーンの終端までの距離を計算
+                v_pos = vehicle.position[0]
+                # 合流レーンは約310m地点で終わる（ends[:3]の合計）
+                dead_end_pos = 310.0
+                distance = max(0.0, dead_end_pos - v_pos)
+                return (True, distance)
+        except (KeyError, IndexError):
+            pass
+        
+        return (False, 1000.0)
 
     def _reset(self) -> None:
         self._make_road()
