@@ -162,31 +162,11 @@ class HighwayMultiEnv(ParallelEnv):
         
         # controlled vehiclesを再取得（reset後に更新される）
         self._controlled_vehicles = None
+        self._spawn_initial_vehicles()
         controlled = self._get_controlled_vehicles()
-
-        # 目標台数をランダムに決定（MIN_VEHICLES～MAX_VEHICLES）
-        import random
-        if seed is not None:
-            random.seed(seed)
-        
-        # ランダムな車両数を決定
-        target = random.randint(self.config.min_vehicles, self.config.max_vehicles)
-        # NUM_AGENTSとの最大値を取る
-        target = max(target, self._num_agents)
-
-        # 車両数を target 以上に補う（road.vehicles）
-        self._ensure_vehicle_count(target)
-
-        # controlled が target 未満なら追加生成
-        controlled = self._get_controlled_vehicles()
-        if len(controlled) < target:
-            self._add_controlled_vehicles(target - len(controlled))
-            controlled = self._get_controlled_vehicles()
-
-        # controlled を NUM_AGENTS に合わせて切り詰め（超過時）
         if len(controlled) > self._num_agents:
             self._controlled_vehicles = controlled[:self._num_agents]
-        
+
         # エージェント数は固定（変更しない）
         # controlled vehicles数が足りない場合は警告を出すが、エージェント数は維持
         if controlled and len(controlled) < self._num_agents:
@@ -447,161 +427,73 @@ class HighwayMultiEnv(ParallelEnv):
         
         return float(r)
 
-    def _ensure_vehicle_count(self, target: Optional[int] = None) -> None:
-        """target 台数以上の車両が存在するように補充する"""
-        if target is None:
-            target = max(self._num_agents, self.config.vehicles_count or self._num_agents)
-
-        # 参照用のベース車両（先頭がなければ作らない）
-        if not self.core_env.road.vehicles:
-            return
-        base = self.core_env.road.vehicles[0]
-
-        while len(self.core_env.road.vehicles) < target:
-            # 既存車両の少し後方に複製して配置（簡易配置）
-            offset = -5.0 * (len(self.core_env.road.vehicles) - 0)
-            new_pos = np.array(base.position) + np.array([offset, 0.0])
-            new_vehicle = ControlledVehicle(
-                self.core_env.road,
-                position=new_pos,
-                heading=base.heading if hasattr(base, "heading") else 0.0,
-                speed=base.speed if hasattr(base, "speed") else 0.0,
-            )
-            new_vehicle.target_lane_index = getattr(base, "target_lane_index", None)
-            self.core_env.road.vehicles.append(new_vehicle)
-
-    def _add_controlled_vehicles(self, count: int) -> None:
-        """不足しているcontrolled vehiclesを追加生成する（ランダムレーンでスポーン）"""
-        if count <= 0:
-            return
-
-        road = self.core_env.road
-        net = road.network
-
-        # 利用可能なレーンを取得（3要素タプルのみを対象）
-        lane_keys = [k for k in net.graph.keys() if isinstance(k, tuple) and len(k) == 3]
-        if not lane_keys:
-            return
-
-        # ベース速度（先頭車両があればそれを使う）
-        base_speed = 20.0
-        if road.vehicles:
-            base_speed = getattr(road.vehicles[0], "speed", base_speed)
-
-        if self._controlled_vehicles is None:
-            self._controlled_vehicles = []
-
+    def _spawn_initial_vehicles(self) -> None:
         import random
-        for _ in range(count):
-            lane_key = random.choice(lane_keys)
-            lane = net.get_lane(lane_key)
 
-            # レーン始点付近にばらつきを持たせてスポーン（0〜30m の範囲）
-            x = random.uniform(0, 30.0)
-            position = lane.position(x, 0)
-            heading = lane.heading_at(x)
+        self._spawn_vehicle_at_start(("j", "k", 0))
 
-            v = ControlledVehicle(
-                road,
-                position=position,
-                heading=heading,
-                speed=base_speed,
-            )
-            # レーンは選択したlane_key
-            v.target_lane_index = lane_key
+        if random.random() < 0.5:
+            self._spawn_vehicle_at_start(("a", "b", 0))
 
-            road.vehicles.append(v)
-            self._controlled_vehicles.append(v)
+        if random.random() < 0.5:
+            self._spawn_vehicle_at_start(("a", "b", 1))
 
-    def _spawn_vehicle_at_start(self) -> bool:
+    def _spawn_vehicle_at_start(self, lane_index: Tuple[str, str, int]) -> bool:
         """
         スタート地点（x=0m）に車両を1台生成
-        
+
         Returns:
             bool: 生成に成功したらTrue、失敗したらFalse
         """
-        # 生成可能なレーンのリスト
-        available_lanes = [
-            ("a", "b", 0),  # 本線レーン0
-            ("a", "b", 1),  # 本線レーン1
-            ("j", "k", 0),  # 合流レーン
-        ]
-        
-        # ランダムにレーンを選択してシャッフル
-        import random
-        random.shuffle(available_lanes)
-        
-        for lane_index in available_lanes:
-            # クールダウン中かチェック
-            if self._current_step - self._lane_spawn_cooldown[lane_index] < self.config.spawn_cooldown_steps:
+        if self._current_step - self._lane_spawn_cooldown[lane_index] < self.config.spawn_cooldown_steps:
+            return False
+
+        for vehicle in self.core_env.road.vehicles:
+            if not hasattr(vehicle, "lane_index") or not vehicle.lane_index:
                 continue
-            
-            # スタート地点付近（0～10m）に既存車両がないかチェック
-            spawn_area_clear = True
-            for vehicle in self.core_env.road.vehicles:
-                if not hasattr(vehicle, 'lane_index') or not vehicle.lane_index:
-                    continue
-                
-                # 同じレーンかチェック
-                if vehicle.lane_index == lane_index:
-                    # 車両の位置をチェック
-                    if 0 <= vehicle.position[0] <= 10.0:
-                        spawn_area_clear = False
-                        break
-            
-            if not spawn_area_clear:
+            if vehicle.lane_index != lane_index:
                 continue
-            
-            # 車両を生成
-            try:
-                lane = self.core_env.road.network.get_lane(lane_index)
-                
-                # スポーン位置（x=0m固定）
-                position = lane.position(0.0, 0.0)
-                heading = lane.heading_at(0.0)
-                
-                # ランダムな速度（25～35 m/s）
-                speed = random.uniform(25.0, 35.0)
-                
-                # 車両タイプを取得
-                from highway_env import utils
-                other_vehicles_type = utils.class_from_path(
-                    self.core_env.config.get("other_vehicles_type", "highway_env.vehicle.behavior.IDMVehicle")
-                )
-                
-                # 車両を生成
-                new_vehicle = other_vehicles_type(
-                    self.core_env.road,
-                    position=position,
-                    heading=heading,
-                    speed=speed
-                )
-                
-                # target_speed を設定（IDMVehicle用）
-                if hasattr(new_vehicle, 'target_speed'):
-                    new_vehicle.target_speed = 30.0
-                
-                # 道路に追加
-                self.core_env.road.vehicles.append(new_vehicle)
-                
-                # クールダウンを記録
-                self._lane_spawn_cooldown[lane_index] = self._current_step
-                
-                return True
-                
-            except Exception as e:
-                # エラーが発生した場合は次のレーンを試す
-                continue
-        
-        # すべてのレーンで生成に失敗
-        return False
+            if 0 <= float(vehicle.position[0]) <= 10.0:
+                return False
+
+        try:
+            lane = self.core_env.road.network.get_lane(lane_index)
+
+            position = lane.position(0.0, 0.0)
+            heading = lane.heading_at(0.0)
+            speed = float(self.np_random.uniform(25.0, 35.0))
+
+            new_vehicle = ControlledVehicle(
+                self.core_env.road,
+                position=position,
+                heading=heading,
+                speed=speed,
+            )
+            new_vehicle.target_lane_index = lane_index
+            new_vehicle.target_speed = 30.0
+
+            self.core_env.road.vehicles.append(new_vehicle)
+
+            if self._controlled_vehicles is None:
+                self._controlled_vehicles = []
+            self._controlled_vehicles.append(new_vehicle)
+
+            self._lane_spawn_cooldown[lane_index] = self._current_step
+            return True
+
+        except Exception:
+            return False
 
     def _try_spawn_vehicles(self) -> None:
         """
         指定確率で車両のスポーンを試行
         """
         import random
-        
-        # 指定確率で生成を試行
-        if random.random() < self.config.spawn_probability:
-            self._spawn_vehicle_at_start()
+
+        if random.random() >= self.config.spawn_probability:
+            return
+
+        lanes = [("a", "b", 0), ("a", "b", 1), ("j", "k", 0)]
+        lane_index = lanes[int(self.core_env.np_random.integers(0, len(lanes)))]
+
+        self._spawn_vehicle_at_start(lane_index)
