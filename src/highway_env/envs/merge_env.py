@@ -155,50 +155,39 @@ class MergeEnv(AbstractEnv):
         self.road = road
 
     def _make_vehicles(self) -> None:
-        """
-        Populate a road with several vehicles on the highway and on the merging lane, as well as an ego-vehicle.
-        
-        本線車両はランダムな数（MIN_VEHICLES～MAX_VEHICLES）を生成
-        合流レーン車両は固定で1台を生成
-
-        :return: the ego-vehicle
-        """
         road = self.road
-        
-        # ego-vehicle（制御対象の車両）を生成
+
+        self.controlled_vehicles = []
+
         ego_vehicle = self.action_type.vehicle_class(
             road, road.network.get_lane(("a", "b", 1)).position(30.0, 0.0), speed=30.0
         )
         road.vehicles.append(ego_vehicle)
+        self.controlled_vehicles.append(ego_vehicle)
 
-        other_vehicles_type = utils.class_from_path(self.config["other_vehicles_type"])
+        spawn_main_lane0 = bool(self.np_random.integers(0, 2))
+        if spawn_main_lane0:
+            v0 = self.action_type.vehicle_class(
+                road, road.network.get_lane(("a", "b", 0)).position(30.0, 0.0), speed=30.0
+            )
+            road.vehicles.append(v0)
+            self.controlled_vehicles.append(v0)
 
-        # ランダムな数の本線車両を生成
-        min_vehicles = self.config.get("min_vehicles", 3)
-        max_vehicles = self.config.get("max_vehicles", 10)
-        num_other_vehicles = self.np_random.integers(min_vehicles, max_vehicles + 1)
+        spawn_main_lane1 = bool(self.np_random.integers(0, 2))
+        if spawn_main_lane1:
+            v1 = self.action_type.vehicle_class(
+                road, road.network.get_lane(("a", "b", 1)).position(10.0, 0.0), speed=30.0
+            )
+            road.vehicles.append(v1)
+            self.controlled_vehicles.append(v1)
 
-        # 本線の車両をランダムに生成
-        for _ in range(num_other_vehicles):
-            # ランダムな位置と速度
-            position_x = self.np_random.uniform(5.0, 120.0)  # 5m～120mの範囲
-            speed = self.np_random.uniform(25.0, 35.0)       # 25～35 m/sの範囲
-            
-            # ランダムなレーン（0または1）
-            lane_id = self.np_random.integers(2)
-            lane = road.network.get_lane(("a", "b", lane_id))
-            
-            # 位置を計算
-            position = lane.position(position_x, 0.0)
-            
-            # 車両を追加
-            road.vehicles.append(other_vehicles_type(road, position, speed=speed))
-
-        # 合流レーンの車両（固定で1台）
-        merging_v = other_vehicles_type(
-            road, road.network.get_lane(("j", "k", 0)).position(110.0, 0.0), speed=20.0
+        merging_v = self.action_type.vehicle_class(
+            road, road.network.get_lane(("j", "k", 0)).position(10.0, 0.0), speed=20.0
         )
         merging_v.target_speed = 30.0
         road.vehicles.append(merging_v)
-        
+        self.controlled_vehicles.append(merging_v)
+
         self.vehicle = ego_vehicle
+
+
