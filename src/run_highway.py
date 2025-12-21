@@ -148,8 +148,15 @@ class HighwayMultiEnv(ParallelEnv):
         self._controlled_vehicles = None
         controlled = self._get_controlled_vehicles()
 
-        # 目標台数（NUM_AGENTS と vehicles_count の最大）
-        target = max(self._num_agents, self.config.vehicles_count or 0)
+        # 目標台数をランダムに決定（MIN_VEHICLES～MAX_VEHICLES）
+        import random
+        if seed is not None:
+            random.seed(seed)
+        
+        # ランダムな車両数を決定
+        target = random.randint(self.config.min_vehicles, self.config.max_vehicles)
+        # NUM_AGENTSとの最大値を取る
+        target = max(target, self._num_agents)
 
         # 車両数を target 以上に補う（road.vehicles）
         self._ensure_vehicle_count(target)

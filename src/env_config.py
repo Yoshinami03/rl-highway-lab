@@ -60,6 +60,11 @@ NUM_AGENTS = get_env_int("NUM_AGENTS", 5)
 RENDER_MODE = get_env_str("RENDER_MODE") or None
 VEHICLES_COUNT = get_env_optional_int("VEHICLES_COUNT")
 CONTROLLED_VEHICLES = get_env_optional_int("CONTROLLED_VEHICLES")
+
+# ランダム車両数の範囲設定
+MIN_VEHICLES = get_env_int("MIN_VEHICLES", 3)   # 最小車両数（本線）
+MAX_VEHICLES = get_env_int("MAX_VEHICLES", 10)  # 最大車両数（本線）
+
 OBSERVATION_TYPE = get_env_str("OBSERVATION_TYPE", "Kinematics")
 DURATION = get_env_int("DURATION", 40)
 OBS_SHAPE = get_env_tuple("OBS_SHAPE", (3,))
@@ -115,6 +120,8 @@ class HighwayEnvConfig:
     # 環境パラメータ
     vehicles_count: Optional[int] = VEHICLES_COUNT  # Noneの場合はnum_agentsを使用
     controlled_vehicles: Optional[int] = CONTROLLED_VEHICLES  # Noneの場合はnum_agentsを使用
+    min_vehicles: int = MIN_VEHICLES  # ランダム車両数の最小値
+    max_vehicles: int = MAX_VEHICLES  # ランダム車両数の最大値
     observation_type: str = OBSERVATION_TYPE
     duration: int = DURATION
     
@@ -142,6 +149,8 @@ class HighwayEnvConfig:
         return {
             "vehicles_count": self.vehicles_count or self.num_agents,
             "controlled_vehicles": self.controlled_vehicles or self.num_agents,
+            "min_vehicles": self.min_vehicles,
+            "max_vehicles": self.max_vehicles,
             "observation": {"type": self.observation_type},
             "duration": self.duration,
             "simulation_frequency": self.simulation_frequency,
