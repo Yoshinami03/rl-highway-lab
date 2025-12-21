@@ -438,6 +438,16 @@ class HighwayMultiEnv(ParallelEnv):
         if random.random() < 0.5:
             self._spawn_vehicle_at_start(("a", "b", 1))
 
+    def _spawn_vehicles(self) -> None:
+        if float(self.core_env.np_random.random()) < self.config.spawn_probability:
+            self._spawn_vehicle_at_start(("j", "k", 0))
+
+        if float(self.core_env.np_random.random()) < self.config.spawn_probability:
+            self._spawn_vehicle_at_start(("a", "b", 0))
+
+        if float(self.core_env.np_random.random()) < self.config.spawn_probability:
+            self._spawn_vehicle_at_start(("a", "b", 1))
+
     def _spawn_vehicle_at_start(self, lane_index: Tuple[str, str, int]) -> bool:
         """
         スタート地点（x=0m）に車両を1台生成
@@ -485,15 +495,4 @@ class HighwayMultiEnv(ParallelEnv):
             return False
 
     def _try_spawn_vehicles(self) -> None:
-        """
-        指定確率で車両のスポーンを試行
-        """
-        import random
-
-        if random.random() >= self.config.spawn_probability:
-            return
-
-        lanes = [("a", "b", 0), ("a", "b", 1), ("j", "k", 0)]
-        lane_index = lanes[int(self.core_env.np_random.integers(0, len(lanes)))]
-
-        self._spawn_vehicle_at_start(lane_index)
+        self._spawn_vehicles()
