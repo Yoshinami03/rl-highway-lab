@@ -28,11 +28,11 @@ class HighwayMultiEnv(ParallelEnv):
     metadata = {"render_modes": ["human", "rgb_array"], "name": "highway_multi_merge", "is_parallel": True}
 
     def __init__(
-        self,
-        config: Optional[HighwayEnvConfig] = None,
-        num_agents: Optional[int] = None,
-        render_mode: Optional[str] = None,
-    ):
+    self,
+    config: Optional[HighwayEnvConfig] = None,
+    num_agents: Optional[int] = None,
+    render_mode: Optional[str] = None,
+):
         if config is None:
             config = default_config
 
@@ -51,8 +51,8 @@ class HighwayMultiEnv(ParallelEnv):
         )
         self.core_env = self.env.unwrapped
 
-        num_controlled = config.controlled_vehicles if config.controlled_vehicles is not None else config.num_agents
-        self._num_agents = int(num_controlled)
+        max_agents = int(config.num_agents)
+        self._num_agents = max_agents
         self.possible_agents = [f"car_{i}" for i in range(self._num_agents)]
         self.agents: List[str] = []
 
@@ -63,16 +63,19 @@ class HighwayMultiEnv(ParallelEnv):
 
         self._current_step = 0
 
-        self._fleet = ControlledFleet(max_agents=self._num_agents)
+        self._fleet = ControlledFleet(agent_ids=self.possible_agents)
         self._spawner = VehicleSpawner(
             core_env=self.core_env,
             spawn_probability=float(config.spawn_probability),
             spawn_cooldown_steps=int(config.spawn_cooldown_steps),
         )
         self._action_applier = VehicleActionApplier(core_env=self.core_env)
-        self._env_stepper = EnvStepper(env=self.env)
         self._selector = AgentVehicleSelector(core_env=self.core_env)
-        self._obs_builder = ObservationBuilder(core_env=self.core_env, obs_dim=self.obs_dim, obs_dtype=str(config.obs_dtype))
+        self._obs_builder = ObservationBuilder(
+            core_env=self.core_env,
+            obs_dim=self.obs_dim,
+            obs_dtype=str(config.obs_dtype),
+        )
         self._reward_calc = RewardCalculator(
             core_env=self.core_env,
             speed_normalization=float(config.speed_normalization),
@@ -89,50 +92,53 @@ class HighwayMultiEnv(ParallelEnv):
     def unwrapped(self):
         return self
 
-    def reset(
-        self,
-        seed: Optional[int] = None,
-        options: Optional[Dict] = None,
-    ) -> Tuple[Dict[str, np.ndarray], Dict[str, Dict]]:
+    def reset(self, seed=None, options=None):
         self.env.reset(seed=seed, options=options)
 
         self._current_step = 0
-        self._fleet.reset()
         self._spawner.reset()
+        self._fleet.reset()
 
-        for v in self._spawner.spawn_initial(step=self._current_step):
-            self._fleet.append(v)
+        alive = list(self.core_env.road.vehicles)
+        self._fleet.assign_new(alive)
 
-        self.agents = self.possible_agents[:]
+        self.agents = self._fleet.assigned_agents()
 
-        obs = {a: self._obs_for_agent_index(i) for i, a in enumerate(self.agents)}
+        obs = {a: self._obs_builder.build(self._fleet.vehicle_of(a)) for a in self.agents}
         info = {a: {} for a in self.agents}
         return obs, info
 
-    def step(
-        self,
-        actions: Dict[str, int],
-    ) -> Tuple[Dict[str, np.ndarray], Dict[str, float], Dict[str, bool], Dict[str, bool], Dict[str, Dict]]:
+
+    def step(self, actions):
         self._current_step += 1
 
-        for v in self._spawner.spawn_continuous(step=self._current_step):
-            self._fleet.append(v)
+        alive = list(self.core_env.road.vehicles)
+        self._fleet.drop_missing(alive)
 
-        controlled = self._fleet.primary()
-        if not controlled:
-            controlled = list(self.core_env.road.vehicles[: len(self.agents)])
+        if self._fleet.free_agents():
+            spawned = list(self._spawner.spawn_continuous(step=self._current_step))
+            self._fleet.assign_new(spawned)
 
-        self._action_applier.apply(actions=actions, agents=self.agents, vehicles=controlled)
+        self._debug_control_coverage(self._current_step)
 
-        _, _, term, trunc, base_info = self._env_stepper.step(
-            actions=actions,
-            agents=self.agents,
-            controlled_count=len(controlled),
-        )
 
-        obs = {a: self._obs_for_agent_index(i) for i, a in enumerate(self.agents)}
-        rewards = {a: self._reward_for_agent_index(i) for i, a in enumerate(self.agents)}
+        self.agents = self._fleet.assigned_agents()
 
+        for a in self.agents:
+            v = self._fleet.vehicle_of(a)
+            if v is None:
+                continue
+            action = int(actions.get(a, 1))
+            self._action_applier._apply_one(v, action)
+
+        _, _, term, trunc, base_info = self.env.step(1)
+
+        alive2 = list(self.core_env.road.vehicles)
+        self._fleet.drop_missing(alive2)
+        self.agents = self._fleet.assigned_agents()
+
+        obs = {a: self._obs_builder.build(self._fleet.vehicle_of(a)) for a in self.agents}
+        rewards = {a: self._reward_calc.calc(self._fleet.vehicle_of(a)) for a in self.agents}
         terminations = {a: bool(term) for a in self.agents}
         truncations = {a: bool(trunc) for a in self.agents}
         infos = {a: dict(base_info) if base_info else {} for a in self.agents}
@@ -141,6 +147,7 @@ class HighwayMultiEnv(ParallelEnv):
             self.agents = []
 
         return obs, rewards, terminations, truncations, infos
+
 
     def render(self) -> Optional[np.ndarray]:
         return self.env.render()
@@ -175,3 +182,19 @@ class HighwayMultiEnv(ParallelEnv):
         controlled = self._fleet.primary()
         vehicle = self._selector.select(index=index, controlled=controlled)
         return self._reward_calc.calc(vehicle)
+
+    def _debug_control_coverage(self, step: int) -> None:
+        road_vehicles = list(self.core_env.road.vehicles)
+        assigned_agents = self._fleet.assigned_agents()
+        assigned_vehicles = [self._fleet.vehicle_of(a) for a in assigned_agents]
+        assigned_vehicle_ids = {id(v) for v in assigned_vehicles if v is not None}
+
+        unassigned = [v for v in road_vehicles if id(v) not in assigned_vehicle_ids]
+
+        print(
+            f"[step={step}] road={len(road_vehicles)} assigned_agents={len(assigned_agents)} unassigned={len(unassigned)}"
+        )
+
+        if unassigned:
+            sample = unassigned[:5]
+            print("[unassigned_sample]", [type(v).__name__ for v in sample], [id(v) for v in sample])

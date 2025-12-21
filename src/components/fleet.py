@@ -1,24 +1,37 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, List
+from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 
 @dataclass
 class ControlledFleet:
-    max_agents: int
-    vehicles: List[Any] = field(default_factory=list)
+    agent_ids: Sequence[str]
+    by_agent: Dict[str, Optional[Any]] = field(default_factory=dict)
 
     def reset(self) -> None:
-        self.vehicles = []
+        self.by_agent = {a: None for a in self.agent_ids}
 
-    def primary(self) -> List[Any]:
-        if len(self.vehicles) >= self.max_agents:
-            return self.vehicles[: self.max_agents]
-        return self.vehicles
+    def assigned_agents(self) -> List[str]:
+        return [a for a, v in self.by_agent.items() if v is not None]
 
-    def append(self, vehicle: Any) -> None:
-        self.vehicles.append(vehicle)
+    def free_agents(self) -> List[str]:
+        return [a for a, v in self.by_agent.items() if v is None]
 
-    def is_empty(self) -> bool:
-        return len(self.vehicles) == 0
+    def vehicle_of(self, agent_id: str) -> Optional[Any]:
+        return self.by_agent.get(agent_id)
+
+    def drop_missing(self, alive: Iterable[Any]) -> None:
+        alive_set = set(alive)
+        for a in self.agent_ids:
+            v = self.by_agent.get(a)
+            if v is None:
+                continue
+            if v not in alive_set:
+                self.by_agent[a] = None
+
+    def assign_new(self, vehicles: Sequence[Any]) -> None:
+        free = self.free_agents()
+        n = min(len(free), len(vehicles))
+        for i in range(n):
+            self.by_agent[free[i]] = vehicles[i]
