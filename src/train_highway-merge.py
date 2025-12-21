@@ -12,6 +12,7 @@ for _p in (_LOCAL_HE_PATH, _SRC_DIR):
         sys.path.insert(0, _p)
 
 from run_highway import HighwayMultiEnv
+from training_monitor import TrainingQualityMonitor
 from env_config import (
     env_config, 
     HighwayEnvConfig, 
@@ -24,6 +25,12 @@ from env_config import (
     PPO_LEARNING_RATE,
     NUM_VEC_ENVS,
     NUM_CPUS,
+    QUALITY_CHECK_FREQ,
+    MIN_EXPLAINED_VARIANCE,
+    APPROX_KL_MIN,
+    APPROX_KL_MAX,
+    MIN_CLIP_FRACTION,
+    QUALITY_MAX_CHECKS,
 )
 
 
@@ -89,7 +96,18 @@ if __name__ == "__main__":
         learning_rate=PPO_LEARNING_RATE,
     )
 
-    model.learn(total_timesteps=TOTAL_TIMESTEPS)
+    # 学習品質監視コールバックを作成
+    quality_monitor = TrainingQualityMonitor(
+        check_freq=QUALITY_CHECK_FREQ,
+        min_explained_variance=MIN_EXPLAINED_VARIANCE,
+        approx_kl_range=(APPROX_KL_MIN, APPROX_KL_MAX),
+        min_clip_fraction=MIN_CLIP_FRACTION,
+        max_checks=QUALITY_MAX_CHECKS,
+        verbose=1
+    )
+
+    # コールバックを使用して学習
+    model.learn(total_timesteps=TOTAL_TIMESTEPS, callback=quality_monitor)
     model.save(MODEL_NAME)
 
     vec_env.close()

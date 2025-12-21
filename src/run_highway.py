@@ -90,6 +90,14 @@ class HighwayMultiEnv(ParallelEnv):
         
         # 観測次元を保存（一貫性のため）
         self.obs_dim = obs_dim
+        
+        # 継続的な車両生成の管理
+        self._lane_spawn_cooldown = {
+            ("a", "b", 0): 0,  # 本線レーン0の最終スポーンステップ
+            ("a", "b", 1): 0,  # 本線レーン1の最終スポーンステップ
+            ("j", "k", 0): 0,  # 合流レーンの最終スポーンステップ
+        }
+        self._current_step = 0  # 現在のステップ数
 
     def observation_space(self, agent: str) -> spaces.Space:
         return self.observation_spaces[agent]
@@ -143,6 +151,14 @@ class HighwayMultiEnv(ParallelEnv):
         options: Optional[Dict] = None
     ) -> Tuple[Dict[str, np.ndarray], Dict[str, Dict]]:
         obs, info = self.env.reset(seed=seed, options=options)
+        
+        # 継続的な車両生成の管理をリセット
+        self._lane_spawn_cooldown = {
+            ("a", "b", 0): 0,
+            ("a", "b", 1): 0,
+            ("j", "k", 0): 0,
+        }
+        self._current_step = 0
         
         # controlled vehiclesを再取得（reset後に更新される）
         self._controlled_vehicles = None
@@ -202,6 +218,12 @@ class HighwayMultiEnv(ParallelEnv):
         重要: 各エージェントは独立に行動を決定し、自分の車両のみを制御します。
         これにより、同じモデルを複製して使う形になり、協調行動が自然に生まれます。
         """
+        # ステップカウンタをインクリメント
+        self._current_step += 1
+        
+        # 継続的な車両生成を試行
+        self._try_spawn_vehicles()
+        
         # controlled vehiclesを取得
         controlled = self._get_controlled_vehicles()
         if not controlled:
@@ -490,3 +512,96 @@ class HighwayMultiEnv(ParallelEnv):
 
             road.vehicles.append(v)
             self._controlled_vehicles.append(v)
+
+    def _spawn_vehicle_at_start(self) -> bool:
+        """
+        スタート地点（x=0m）に車両を1台生成
+        
+        Returns:
+            bool: 生成に成功したらTrue、失敗したらFalse
+        """
+        # 生成可能なレーンのリスト
+        available_lanes = [
+            ("a", "b", 0),  # 本線レーン0
+            ("a", "b", 1),  # 本線レーン1
+            ("j", "k", 0),  # 合流レーン
+        ]
+        
+        # ランダムにレーンを選択してシャッフル
+        import random
+        random.shuffle(available_lanes)
+        
+        for lane_index in available_lanes:
+            # クールダウン中かチェック
+            if self._current_step - self._lane_spawn_cooldown[lane_index] < self.config.spawn_cooldown_steps:
+                continue
+            
+            # スタート地点付近（0～10m）に既存車両がないかチェック
+            spawn_area_clear = True
+            for vehicle in self.core_env.road.vehicles:
+                if not hasattr(vehicle, 'lane_index') or not vehicle.lane_index:
+                    continue
+                
+                # 同じレーンかチェック
+                if vehicle.lane_index == lane_index:
+                    # 車両の位置をチェック
+                    if 0 <= vehicle.position[0] <= 10.0:
+                        spawn_area_clear = False
+                        break
+            
+            if not spawn_area_clear:
+                continue
+            
+            # 車両を生成
+            try:
+                lane = self.core_env.road.network.get_lane(lane_index)
+                
+                # スポーン位置（x=0m固定）
+                position = lane.position(0.0, 0.0)
+                heading = lane.heading_at(0.0)
+                
+                # ランダムな速度（25～35 m/s）
+                speed = random.uniform(25.0, 35.0)
+                
+                # 車両タイプを取得
+                from highway_env import utils
+                other_vehicles_type = utils.class_from_path(
+                    self.core_env.config.get("other_vehicles_type", "highway_env.vehicle.behavior.IDMVehicle")
+                )
+                
+                # 車両を生成
+                new_vehicle = other_vehicles_type(
+                    self.core_env.road,
+                    position=position,
+                    heading=heading,
+                    speed=speed
+                )
+                
+                # target_speed を設定（IDMVehicle用）
+                if hasattr(new_vehicle, 'target_speed'):
+                    new_vehicle.target_speed = 30.0
+                
+                # 道路に追加
+                self.core_env.road.vehicles.append(new_vehicle)
+                
+                # クールダウンを記録
+                self._lane_spawn_cooldown[lane_index] = self._current_step
+                
+                return True
+                
+            except Exception as e:
+                # エラーが発生した場合は次のレーンを試す
+                continue
+        
+        # すべてのレーンで生成に失敗
+        return False
+
+    def _try_spawn_vehicles(self) -> None:
+        """
+        指定確率で車両のスポーンを試行
+        """
+        import random
+        
+        # 指定確率で生成を試行
+        if random.random() < self.config.spawn_probability:
+            self._spawn_vehicle_at_start()

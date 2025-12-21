@@ -65,6 +65,18 @@ CONTROLLED_VEHICLES = get_env_optional_int("CONTROLLED_VEHICLES")
 MIN_VEHICLES = get_env_int("MIN_VEHICLES", 3)   # 最小車両数（本線）
 MAX_VEHICLES = get_env_int("MAX_VEHICLES", 10)  # 最大車両数（本線）
 
+# 継続的な車両生成設定
+SPAWN_PROBABILITY = get_env_float("SPAWN_PROBABILITY", 0.1)  # 毎ステップの車両生成確率
+SPAWN_COOLDOWN_STEPS = get_env_int("SPAWN_COOLDOWN_STEPS", 20)  # 同一レーンへの連続生成を防ぐクールダウン
+
+# 学習品質監視設定
+QUALITY_CHECK_FREQ = get_env_int("QUALITY_CHECK_FREQ", 10)  # チェック頻度（イテレーション）
+MIN_EXPLAINED_VARIANCE = get_env_float("MIN_EXPLAINED_VARIANCE", 0.1)  # explained_varianceの最小目標値
+APPROX_KL_MIN = get_env_float("APPROX_KL_MIN", 0.005)  # approx_klの最小許容値
+APPROX_KL_MAX = get_env_float("APPROX_KL_MAX", 0.02)  # approx_klの最大許容値
+MIN_CLIP_FRACTION = get_env_float("MIN_CLIP_FRACTION", 0.05)  # clip_fractionの最小目標値
+QUALITY_MAX_CHECKS = get_env_int("QUALITY_MAX_CHECKS", 4)  # 最大チェック回数（この回数だけチェックを実施）
+
 OBSERVATION_TYPE = get_env_str("OBSERVATION_TYPE", "Kinematics")
 DURATION = get_env_int("DURATION", 40)
 OBS_SHAPE = get_env_tuple("OBS_SHAPE", (3,))
@@ -122,6 +134,8 @@ class HighwayEnvConfig:
     controlled_vehicles: Optional[int] = CONTROLLED_VEHICLES  # Noneの場合はnum_agentsを使用
     min_vehicles: int = MIN_VEHICLES  # ランダム車両数の最小値
     max_vehicles: int = MAX_VEHICLES  # ランダム車両数の最大値
+    spawn_probability: float = SPAWN_PROBABILITY  # 毎ステップの車両生成確率
+    spawn_cooldown_steps: int = SPAWN_COOLDOWN_STEPS  # 同一レーンへの連続生成を防ぐクールダウン
     observation_type: str = OBSERVATION_TYPE
     duration: int = DURATION
     
