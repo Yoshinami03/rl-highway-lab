@@ -65,32 +65,17 @@ class HighwayMultiEnv(ParallelEnv):
         self._num_agents = num_controlled  # プライベート属性として保存（ParallelEnvのnum_agentsプロパティと競合しないように）
         self.possible_agents = [f"car_{i}" for i in range(self._num_agents)]
         
-        # 観測空間の定義（17次元：レーン情報、周囲車両情報）
-        # デフォルトは17次元だが、設定で上書き可能
-        obs_dim = config.obs_shape[0] if len(config.obs_shape) > 0 else 17
+        # 観測空間の定義（拡張版：速度、レーン、前方車距離、相対速度）
+        # デフォルトは4次元だが、設定で上書き可能
+        obs_dim = config.obs_shape[0] if len(config.obs_shape) > 0 else 4
         obs_low = np.array([-np.inf] * obs_dim, dtype=np.float32)
         obs_high = np.array([np.inf] * obs_dim, dtype=np.float32)
-        
-        # 17次元観測の範囲設定
-        if obs_dim >= 17:
-            # 1-2: レーン移動可否 (0 or 1)
-            obs_low[0:2] = 0.0
-            obs_high[0:2] = 1.0
-            # 3: 行き止まりフラグ (0 or 1)
-            obs_low[2] = 0.0
-            obs_high[2] = 1.0
-            # 4: 行き止まりまでの距離
-            obs_low[3] = 0.0
-            obs_high[3] = 1000.0
-            # 5: 自車速度
-            obs_low[4] = 0.0
-            obs_high[4] = 50.0
-            # 6-17: 周囲車両の距離と速度
-            for i in range(5, 17, 2):
-                obs_low[i] = 0.0  # 距離
-                obs_high[i] = 200.0
-                obs_low[i+1] = 0.0  # 速度
-                obs_high[i+1] = 50.0
+        # 前方車距離と相対速度は正の値になることが多いので、適切な範囲を設定
+        if obs_dim >= 4:
+            obs_low[2] = 0.0  # 前方車距離は0以上
+            obs_high[2] = 200.0  # 最大距離
+            obs_low[3] = -50.0  # 相対速度の範囲
+            obs_high[3] = 50.0
         
         obs_space = spaces.Box(
             low=obs_low, 
@@ -269,9 +254,18 @@ class HighwayMultiEnv(ParallelEnv):
         # 各エージェントの観測を生成（各エージェントは自分の観測のみを受け取る）
         obs_dict = {a: self._get_vehicle_observation(i) for i, a in enumerate(self.agents)}
         
-        # 全車両の報酬を計算して合計（各車両に同じ値を配る）
-        total_reward = self._calc_total_reward()
-        rewards = {a: total_reward for a in self.agents}
+        # 各エージェントの報酬を計算（車両が足りない場合は0で埋める）
+        rewards = {}
+        max_len = max(len(controlled), len(self.core_env.road.vehicles))
+        for i, a in enumerate(self.agents):
+            if i < len(controlled):
+                v = controlled[i]
+            elif i < len(self.core_env.road.vehicles):
+                v = self.core_env.road.vehicles[i]
+            else:
+                rewards[a] = 0.0
+                continue
+            rewards[a] = self._calc_reward(v)
         
         # 終了条件を各エージェントに配布
         terminations = {a: bool(term) for a in self.agents}
@@ -292,26 +286,10 @@ class HighwayMultiEnv(ParallelEnv):
         self.env.close()
 
     def _get_vehicle_observation(self, i: int) -> np.ndarray:
-        """車両の観測を取得（17次元：レーン情報、周囲車両情報）
+        """車両の観測を取得（拡張版：前方車との距離・相対速度を含む）
         
-        17次元の観測:
-        1. 左レーン移動可否 (0 or 1)
-        2. 右レーン移動可否 (0 or 1)
-        3. 行き止まりフラグ (0 or 1)
-        4. 行き止まりまでの距離
-        5. 自車速度
-        6. 前方車距離
-        7. 前方車速度
-        8. 後方車距離
-        9. 後方車速度
-        10. 左前車距離
-        11. 左前車速度
-        12. 右前車距離
-        13. 右前車速度
-        14. 左後車距離
-        15. 左後車速度
-        16. 右後車距離
-        17. 右後車速度
+        各エージェントは自分の観測のみを受け取ります。
+        これにより、各エージェントが独立に行動を決定できます。
         
         Args:
             i: エージェントのインデックス（0から始まる）
@@ -323,236 +301,122 @@ class HighwayMultiEnv(ParallelEnv):
         if not controlled:
             controlled = self.core_env.road.vehicles
         
-        # 車両が存在しない場合のデフォルト観測
-        default_obs = np.zeros(self.obs_dim, dtype=getattr(np, self.config.obs_dtype))
-        if self.obs_dim >= 17:
-            # デフォルト値を設定
-            default_obs[3] = 1000.0  # 行き止まりまでの距離
-            default_obs[5] = 200.0   # 前方車距離
-            default_obs[7] = 200.0   # 後方車距離
-            default_obs[9] = 200.0   # 左前車距離
-            default_obs[11] = 200.0  # 右前車距離
-            default_obs[13] = 200.0  # 左後車距離
-            default_obs[15] = 200.0  # 右後車距離
-        
         # 車両が存在するかチェック
         if i >= len(controlled) or i >= len(self.core_env.road.vehicles):
-            return default_obs
+            # 車両が存在しない場合はデフォルト値で埋める
+            # ただし、常に同じshapeを返す
+            if self.obs_dim <= 3:
+                return np.array([0.0, 0.0, 0.0], dtype=getattr(np, self.config.obs_dtype))
+            else:
+                # 4次元以上の場合：[速度=0, レーンID=0, 前方車距離=200, 相対速度=0]
+                obs = np.array([0.0, 0.0, 200.0, 0.0], dtype=getattr(np, self.config.obs_dtype))
+                if self.obs_dim > 4:
+                    obs = np.pad(obs, (0, self.obs_dim - 4), mode='constant', constant_values=0.0)
+                elif self.obs_dim < 4:
+                    obs = obs[:self.obs_dim]
+                return obs
         
-        # 車両を取得
+        # 車両を取得（controlled vehicles優先、なければroad.vehiclesから）
         if i < len(controlled):
             v = controlled[i]
         else:
             v = self.core_env.road.vehicles[i]
         
-        # 17次元観測を構築
-        if self.obs_dim >= 17:
-            obs = np.zeros(17, dtype=getattr(np, self.config.obs_dtype))
-            
-            # 1-2: レーン移動可否
-            obs[0] = 1.0 if self._check_lane_available(v, -1) else 0.0  # 左
-            obs[1] = 1.0 if self._check_lane_available(v, 1) else 0.0   # 右
-            
-            # 3-4: 行き止まり情報
-            is_dead_end, dead_end_dist = self._get_dead_end_info(v)
-            obs[2] = 1.0 if is_dead_end else 0.0
-            obs[3] = dead_end_dist
-            
-            # 5: 自車速度
-            obs[4] = float(v.speed)
-            
-            # 6-7: 前方車
-            front_dist, front_speed = self._get_nearest_vehicle_info(v, "front", 0)
-            obs[5] = front_dist
-            obs[6] = front_speed
-            
-            # 8-9: 後方車
-            back_dist, back_speed = self._get_nearest_vehicle_info(v, "back", 0)
-            obs[7] = back_dist
-            obs[8] = back_speed
-            
-            # 10-11: 左前車
-            left_front_dist, left_front_speed = self._get_nearest_vehicle_info(v, "front", -1)
-            obs[9] = left_front_dist
-            obs[10] = left_front_speed
-            
-            # 12-13: 右前車
-            right_front_dist, right_front_speed = self._get_nearest_vehicle_info(v, "front", 1)
-            obs[11] = right_front_dist
-            obs[12] = right_front_speed
-            
-            # 14-15: 左後車
-            left_back_dist, left_back_speed = self._get_nearest_vehicle_info(v, "back", -1)
-            obs[13] = left_back_dist
-            obs[14] = left_back_speed
-            
-            # 16-17: 右後車
-            right_back_dist, right_back_speed = self._get_nearest_vehicle_info(v, "back", 1)
-            obs[15] = right_back_dist
-            obs[16] = right_back_speed
-            
-            # 設定された次元数に合わせて調整
-            if self.obs_dim > 17:
-                obs = np.pad(obs, (0, self.obs_dim - 17), mode='constant', constant_values=0.0)
-            elif self.obs_dim < 17:
-                obs = obs[:self.obs_dim]
-            
-            return obs
-        else:
-            # 17次元未満の場合は後方互換性のため簡易版を返す
-            speed = float(v.speed)
-            lane_id = float(v.lane_index[2] if hasattr(v, "lane_index") and v.lane_index else 0)
-            
-            if self.obs_dim <= 3:
-                return np.array([v.position[0], v.position[1], speed], dtype=getattr(np, self.config.obs_dtype))
-            else:
-                # 4次元: [速度, レーンID, 前方車距離, 相対速度]
-                front_dist, front_speed = self._get_nearest_vehicle_info(v, "front", 0)
-                rel_speed = front_speed - speed if front_dist < 200.0 else 0.0
-                obs = np.array([speed, lane_id, front_dist, rel_speed], dtype=getattr(np, self.config.obs_dtype))
-                
-                if self.obs_dim > 4:
-                    obs = np.pad(obs, (0, self.obs_dim - 4), mode='constant', constant_values=0.0)
-                elif self.obs_dim < 4:
-                    obs = obs[:self.obs_dim]
-                
-                return obs
-
-    def _check_lane_available(self, vehicle, lane_offset: int) -> bool:
-        """レーン移動可否をチェック"""
-        if not hasattr(vehicle, 'lane_index') or not vehicle.lane_index:
-            return False
+        # 基本観測：速度、レーンID
+        speed = float(v.speed)
+        lane_id = float(v.lane_index[2] if hasattr(v, "lane_index") and v.lane_index else 0)
         
-        try:
-            road, start, lane = vehicle.lane_index
-            target_lane = lane + lane_offset
-            self.core_env.road.network.get_lane((road, start, target_lane))
-            return True
-        except (KeyError, IndexError, AttributeError):
-            return False
-
-    def _get_dead_end_info(self, vehicle) -> tuple:
-        """行き止まり情報を取得"""
-        if not hasattr(vehicle, 'lane_index') or not vehicle.lane_index:
-            return (False, 1000.0)
+        if self.obs_dim <= 3:
+            # 元の3次元観測（後方互換性）
+            return np.array([v.position[0], v.position[1], speed], dtype=getattr(np, self.config.obs_dtype))
         
-        try:
-            current_lane = self.core_env.road.network.get_lane(vehicle.lane_index)
-            if hasattr(current_lane, 'forbidden') and current_lane.forbidden:
-                v_pos = vehicle.position[0]
-                dead_end_pos = 310.0
-                distance = max(0.0, dead_end_pos - v_pos)
-                return (True, distance)
-        except (KeyError, IndexError, AttributeError):
-            pass
+        # 拡張観測：前方車との距離と相対速度を計算
+        headway = 200.0  # デフォルト値（前方車なし）
+        rel_speed = 0.0
         
-        return (False, 1000.0)
-
-    def _get_nearest_vehicle_info(self, vehicle, direction: str, lane_offset: int) -> tuple:
-        """指定方向・レーンオフセットの最も近い車両の距離と速度を取得"""
-        if not hasattr(vehicle, 'lane_index') or not vehicle.lane_index:
-            return (200.0, 0.0)
-        
-        try:
-            road, start, lane = vehicle.lane_index
-            target_lane = lane + lane_offset
-            self.core_env.road.network.get_lane((road, start, target_lane))
-        except (KeyError, IndexError, AttributeError):
-            return (200.0, 0.0)
-        
-        v_pos = np.array(vehicle.position)
-        min_distance = 200.0
-        target_speed = 0.0
+        # 同レーンまたは隣接レーンの前方車を探す
+        v_pos = np.array(v.position)
+        v_lane = v.lane_index[2] if hasattr(v, "lane_index") and v.lane_index else 0
         
         for other in self.core_env.road.vehicles:
-            if other is vehicle:
+            if other is v:
                 continue
             
-            if not hasattr(other, 'lane_index') or not other.lane_index:
-                continue
+            other_pos = np.array(other.position)
+            other_lane = other.lane_index[2] if hasattr(other, "lane_index") and other.lane_index else 0
             
-            if other.lane_index != (road, start, target_lane):
+            # 前方（x方向が大きい）かつ同レーンまたは隣接レーン
+            dx = other_pos[0] - v_pos[0]
+            dy = other_pos[1] - v_pos[1]
+            
+            if dx > 0 and abs(dy) < 5.0:  # 前方でy方向が近い
+                distance = np.linalg.norm([dx, dy])
+                if distance < headway:
+                    headway = distance
+                    rel_speed = float(other.speed - v.speed)
+        
+        # 観測ベクトル：[速度, レーンID, 前方車距離, 相対速度]
+        obs = np.array([speed, lane_id, headway, rel_speed], dtype=getattr(np, self.config.obs_dtype))
+        
+        # 設定された次元数に合わせて調整（常に同じshapeを返す）
+        if self.obs_dim > 4:
+            # さらに拡張する場合は0で埋める
+            obs = np.pad(obs, (0, self.obs_dim - 4), mode='constant', constant_values=0.0)
+        elif self.obs_dim < 4:
+            # 次元が小さい場合は切り詰める
+            obs = obs[:self.obs_dim]
+        
+        return obs
+
+    def _calc_reward(self, v) -> float:
+        """報酬を計算（速度報酬 + 衝突ペナルティ + 危険状態ペナルティ）"""
+        r = v.speed / self.config.speed_normalization
+        
+        # 衝突ペナルティ
+        if getattr(v, "crashed", False):
+            r += self.config.crash_penalty
+        
+        # 危険状態ペナルティ（前方車との距離が近すぎる場合）
+        v_pos = np.array(v.position)
+        min_headway = 200.0
+        
+        for other in self.core_env.road.vehicles:
+            if other is v:
                 continue
             
             other_pos = np.array(other.position)
             dx = other_pos[0] - v_pos[0]
+            dy = other_pos[1] - v_pos[1]
             
-            if direction == "front" and dx <= 0:
-                continue
-            if direction == "back" and dx >= 0:
-                continue
-            
-            distance = abs(dx)
-            if distance < min_distance:
-                min_distance = distance
-                target_speed = float(other.speed)
+            if dx > 0 and abs(dy) < 5.0:  # 前方でy方向が近い
+                distance = np.linalg.norm([dx, dy])
+                if distance < min_headway:
+                    min_headway = distance
         
-        return (min_distance, target_speed)
-
-    def _calc_total_reward(self) -> float:
-        """全車両の報酬を計算して合計（全車両で共有）
+        # 車間距離が10m未満の場合はペナルティ
+        if min_headway < 10.0:
+            r -= 1.0
         
-        報酬項目:
-        - 衝突ペナルティ（全車両チェック）
-        - ゴール報酬（x > 370）
-        - 合流レーンからのゴール追加報酬
-        - 速度報酬（全車両の平均速度）
+        # TTC（Time To Collision）が小さい場合のペナルティ
+        if min_headway < 200.0:
+            # 前方車がより遅い場合のみTTCを計算
+            for other in self.core_env.road.vehicles:
+                if other is v:
+                    continue
+                
+                other_pos = np.array(other.position)
+                dx = other_pos[0] - v_pos[0]
+                dy = other_pos[1] - v_pos[1]
+                
+                if dx > 0 and abs(dy) < 5.0:
+                    distance = np.linalg.norm([dx, dy])
+                    rel_speed = v.speed - other.speed
+                    if rel_speed > 0.1:  # 前方車の方が遅い
+                        ttc = distance / rel_speed
+                        if ttc < 2.0:  # 2秒以内に衝突する可能性
+                            r -= 5.0
         
-        Returns:
-            全車両で共有する報酬の合計
-        """
-        total_reward = 0.0
-        goal_position = 370.0
-        
-        num_vehicles = len(self.core_env.road.vehicles)
-        if num_vehicles == 0:
-            return 0.0
-        
-        total_speed = 0.0
-        collision_count = 0
-        goal_count = 0
-        merge_lane_goal_count = 0
-        
-        for vehicle in self.core_env.road.vehicles:
-            # 衝突ペナルティ
-            if getattr(vehicle, 'crashed', False):
-                collision_count += 1
-            
-            # ゴール判定
-            if hasattr(vehicle, 'position') and vehicle.position[0] > goal_position:
-                goal_count += 1
-                # 合流レーンからのゴールは追加ボーナス
-                if hasattr(vehicle, 'lane_index') and vehicle.lane_index:
-                    road_id = vehicle.lane_index[0]
-                    if road_id in ["j", "k"]:
-                        merge_lane_goal_count += 1
-            
-            # 速度を累積
-            if hasattr(vehicle, 'speed'):
-                total_speed += vehicle.speed
-        
-        # 報酬計算
-        # 衝突ペナルティ: -100 per collision
-        total_reward += collision_count * (-100.0)
-        
-        # ゴール報酬: +50 per goal
-        total_reward += goal_count * 50.0
-        
-        # 合流レーンからのゴール追加報酬: +30
-        total_reward += merge_lane_goal_count * 30.0
-        
-        # 速度報酬: 平均速度に基づく（0-30 m/s を 0-10 にスケール）
-        avg_speed = total_speed / num_vehicles
-        speed_reward = (avg_speed / 30.0) * 10.0
-        total_reward += speed_reward
-        
-        return float(total_reward)
-
-    def _calc_reward(self, v) -> float:
-        """個別車両の報酬を計算（後方互換性のため残す）"""
-        # 新しい実装では _calc_total_reward() を使用
-        # この関数は互換性のためのみ残す
-        return self._calc_total_reward()
+        return float(r)
 
     def _ensure_vehicle_count(self, target: Optional[int] = None) -> None:
         """target 台数以上の車両が存在するように補充する"""
