@@ -98,7 +98,7 @@ class MergeEnv(AbstractEnv):
         y = [0, StraightLane.DEFAULT_WIDTH]
         line_type = [[c, s], [n, c]]
         line_type_merge = [[c, s], [n, s]]
-        for i in range(2):
+        for i in range(3):
             net.add_lane(
                 "a",
                 "b",
