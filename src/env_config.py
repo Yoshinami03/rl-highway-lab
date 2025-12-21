@@ -93,6 +93,7 @@ CAMERA_POSITION_Y = get_env_float("CAMERA_POSITION_Y", 4.0)
 
 # シミュレーション設定
 SIMULATION_FREQUENCY = get_env_int("SIMULATION_FREQUENCY", 5)  # 低くすると進行がゆっくりになる
+MAX_EPISODE_STEPS = get_env_int("MAX_EPISODE_STEPS", 500)  # エピソードの最大ステップ数
 
 # 推論専用の上書き設定（未設定ならNone）
 INFER_NUM_AGENTS = get_env_optional_int("INFER_NUM_AGENTS")
@@ -152,6 +153,7 @@ class HighwayEnvConfig:
 
     # 時間設定
     simulation_frequency: int = SIMULATION_FREQUENCY
+    max_episode_steps: int = MAX_EPISODE_STEPS  # エピソードの最大ステップ数
 
     # カメラ設定
     camera_zoom: float = CAMERA_ZOOM
@@ -171,6 +173,7 @@ class HighwayEnvConfig:
             "real_time_rendering": True,  # viewerのtickを有効化して実時間描画
             "scaling": self.camera_zoom,  # ズーム倍率（数値を下げると広く見える）
             "centering_position": [self.camera_position_x, self.camera_position_y],  # カメラ中心位置
+            "max_episode_steps": MAX_EPISODE_STEPS,  # エピソードの最大ステップ数
         }
     
     def get_render_mode(self, override: Optional[str] = None) -> Optional[str]:

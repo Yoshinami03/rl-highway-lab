@@ -30,6 +30,7 @@ class MergeEnv(AbstractEnv):
                 "reward_speed_range": [20, 30],
                 "merging_speed_reward": -0.5,
                 "lane_change_reward": -0.05,
+                "max_episode_steps": 500,
             }
         )
         return cfg
@@ -74,8 +75,9 @@ class MergeEnv(AbstractEnv):
         }
 
     def _is_terminated(self) -> bool:
-        """The episode is over when a collision occurs or when the access ramp has been passed."""
-        return self.vehicle.crashed or bool(self.vehicle.position[0] > 370)
+        """The episode is over when a collision occurs or when max steps reached."""
+        max_steps = self.config.get("max_episode_steps", 500)
+        return self.vehicle.crashed or self.steps >= max_steps
 
     def _is_truncated(self) -> bool:
         return False
