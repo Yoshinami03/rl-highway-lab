@@ -378,10 +378,6 @@ class HighwayMultiEnv(ParallelEnv):
 
         unassigned = [v for v in road_vehicles if id(v) not in assigned_vehicle_ids]
 
-        print(
-            f"[step={step}] road={len(road_vehicles)} assigned_agents={len(assigned_agents)} unassigned={len(unassigned)}"
-        )
-
         if unassigned:
             sample = unassigned[:5]
             print("[unassigned_sample]", [type(v).__name__ for v in sample], [id(v) for v in sample])
