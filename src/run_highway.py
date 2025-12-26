@@ -21,7 +21,7 @@ from env_config import HighwayEnvConfig, default_config
 from components.fleet import ControlledFleet
 from components.spawn import VehicleSpawner
 from components.action import EnvStepper, VehicleActionApplier
-from components.metrics import AgentVehicleSelector, ObservationBuilder, RewardCalculator
+from components.metrics import AgentVehicleSelector, ObservationBuilder, RewardCalculator, TeamRewardCalculator
 
 
 class HighwayMultiEnv(ParallelEnv):
@@ -59,7 +59,10 @@ class HighwayMultiEnv(ParallelEnv):
         self.obs_dim = int(config.obs_shape[0] if len(config.obs_shape) > 0 else 4)
 
         self.observation_spaces = {a: self._build_obs_space() for a in self.possible_agents}
-        self.action_spaces = {a: spaces.Discrete(config.action_space_size) for a in self.possible_agents}
+        # MultiDiscrete([3, 3]): [speed_action, lane_action]
+        # speed_action: 0=減速, 1=維持, 2=加速
+        # lane_action:  0=左変更, 1=維持, 2=右変更
+        self.action_spaces = {a: spaces.MultiDiscrete([3, 3]) for a in self.possible_agents}
 
         self._current_step = 0
 
@@ -75,11 +78,28 @@ class HighwayMultiEnv(ParallelEnv):
             core_env=self.core_env,
             obs_dim=self.obs_dim,
             obs_dtype=str(config.obs_dtype),
+            merge_start=float(config.merge_start),
+            merge_end=float(config.merge_end),
+            lane_width=float(config.lane_width),
+            max_obs_dist=float(config.max_obs_dist),
+            max_deadend_obs=float(config.max_deadend_obs),
         )
         self._reward_calc = RewardCalculator(
             core_env=self.core_env,
             speed_normalization=float(config.speed_normalization),
             crash_penalty=float(config.crash_penalty),
+        )
+
+        # チーム報酬計算器
+        self._team_reward_calc = TeamRewardCalculator(
+            core_env=self.core_env,
+            reward_goal=float(config.reward_goal),
+            crash_penalty=float(config.crash_penalty),
+            close_dist_threshold=float(config.close_dist_threshold),
+            close_penalty_base=float(config.close_penalty_base),
+            close_penalty_slope=float(config.close_penalty_slope),
+            accel_penalty_scale=float(config.accel_penalty_scale),
+            lane_change_penalty=float(config.lane_change_penalty),
         )
 
     def observation_space(self, agent: str) -> spaces.Space:
@@ -102,51 +122,175 @@ class HighwayMultiEnv(ParallelEnv):
         alive = list(self.core_env.road.vehicles)
         self._fleet.assign_new(alive)
 
-        self.agents = self._fleet.assigned_agents()
+        # プール制: エージェントリストは常に固定
+        self.agents = self.possible_agents[:]
 
-        obs = {a: self._obs_builder.build(self._fleet.vehicle_of(a)) for a in self.agents}
-        info = {a: {} for a in self.agents}
+        # 全エージェントに対して観測を生成（非アクティブはダミー観測）
+        obs = {}
+        info = {}
+        for a in self.agents:
+            is_active = self._fleet.is_active(a)
+            vehicle = self._fleet.vehicle_of(a)
+            obs[a] = self._obs_builder.build(vehicle, is_active=is_active)
+            info[a] = {"is_active": is_active}
+
         return obs, info
-
 
     def step(self, actions):
         self._current_step += 1
 
+        # クールダウンを更新
+        self._fleet.update_cooldowns()
+
         alive = list(self.core_env.road.vehicles)
         self._fleet.drop_missing(alive)
 
-        if self._fleet.free_agents():
+        # スポーン可能なエージェントがあれば新規車両を生成
+        spawnable = self._fleet.spawnable_agents()
+        if spawnable:
             spawned = list(self._spawner.spawn_continuous(step=self._current_step))
             self._fleet.assign_new(spawned)
 
         self._debug_control_coverage(self._current_step)
 
+        # プール制: エージェントリストは常に固定
+        self.agents = self.possible_agents[:]
 
-        self.agents = self._fleet.assigned_agents()
+        # アクティブなエージェントのみアクションを適用
+        # デフォルトアクション: [1, 1] = 速度維持、レーン維持
+        default_action = np.array([1, 1])
+        action_info = {}
 
         for a in self.agents:
+            if not self._fleet.is_active(a):
+                continue  # 非アクティブはスキップ
             v = self._fleet.vehicle_of(a)
             if v is None:
                 continue
-            action = int(actions.get(a, 1))
-            self._action_applier._apply_one(v, action)
+            action = actions.get(a, default_action)
+            info = self._action_applier._apply_one(v, action)
+            action_info[a] = info
 
         _, _, term, trunc, base_info = self.env.step(1)
 
+        # ゴール/デッドエンド/衝突の検出
+        events = self._detect_events()
+
+        # イベント発生した車両をプールに戻す
+        for agent_id, event in events.items():
+            if event["goal"] or event["crash"] or event["deadend"] or event["collision"]:
+                # 車両を道路から削除
+                vehicle = self._fleet.vehicle_of(agent_id)
+                if vehicle is not None and vehicle in self.core_env.road.vehicles:
+                    self.core_env.road.vehicles.remove(vehicle)
+                self._fleet.deactivate_to_pool(agent_id, reason="event")
+
         alive2 = list(self.core_env.road.vehicles)
         self._fleet.drop_missing(alive2)
-        self.agents = self._fleet.assigned_agents()
 
-        obs = {a: self._obs_builder.build(self._fleet.vehicle_of(a)) for a in self.agents}
-        rewards = {a: self._reward_calc.calc(self._fleet.vehicle_of(a)) for a in self.agents}
-        terminations = {a: bool(term) for a in self.agents}
-        truncations = {a: bool(trunc) for a in self.agents}
-        infos = {a: dict(base_info) if base_info else {} for a in self.agents}
+        # 全エージェントに対して観測・報酬を生成
+        obs = {}
+        rewards = {}
+        terminations = {}
+        truncations = {}
+        infos = {}
 
-        if any(terminations.values()) or any(truncations.values()):
+        # チーム報酬の集計
+        team_goal_count = sum(1 for e in events.values() if e["goal"])
+        team_crash_count = sum(1 for e in events.values() if e["crash"] or e["deadend"] or e["collision"])
+        team_deadend_count = sum(1 for e in events.values() if e["deadend"])
+        team_collision_count = sum(1 for e in events.values() if e["collision"])
+
+        # アクティブなエージェントと車両の取得
+        active_agents = self._fleet.assigned_agents()
+        vehicles = {a: self._fleet.vehicle_of(a) for a in self.agents}
+
+        # チーム報酬の計算（全エージェントに同一の報酬）
+        common_reward = self._team_reward_calc.calc_team_reward(
+            events=events,
+            action_infos=action_info,
+            vehicles=vehicles,
+            active_agents=active_agents,
+        )
+
+        for a in self.agents:
+            is_active = self._fleet.is_active(a)
+            vehicle = self._fleet.vehicle_of(a)
+            event = events.get(a, {"goal": False, "crash": False, "deadend": False, "collision": False})
+
+            obs[a] = self._obs_builder.build(vehicle, is_active=is_active)
+
+            # チーム報酬: 全エージェントに同一の報酬
+            rewards[a] = common_reward
+
+            terminations[a] = bool(term)
+            truncations[a] = bool(trunc)
+            infos[a] = {
+                "is_active": is_active,
+                "event_goal": event["goal"],
+                "event_crash": event["crash"],
+                "event_deadend": event["deadend"],
+                "event_collision": event["collision"],
+                "team_goal_count": team_goal_count,
+                "team_crash_count": team_crash_count,
+                "team_deadend_count": team_deadend_count,
+                "team_collision_count": team_collision_count,
+                "team_reward": common_reward,
+                "action_info": action_info.get(a, {}),
+                **(dict(base_info) if base_info else {}),
+            }
+
+        # エピソード終了時もエージェントリストは維持
+        # （PettingZooの仕様上、終了時はagents=[]にする必要あり）
+        if term or trunc:
             self.agents = []
 
         return obs, rewards, terminations, truncations, infos
+
+    def _detect_events(self) -> Dict[str, Dict[str, bool]]:
+        """ゴール到達、デッドエンド、衝突を検出"""
+        events = {}
+        goal_x = float(self.config.goal_x)
+        merge_end = float(self.config.merge_end)
+
+        for a in self.possible_agents:
+            if not self._fleet.is_active(a):
+                events[a] = {"goal": False, "crash": False, "deadend": False, "collision": False}
+                continue
+
+            vehicle = self._fleet.vehicle_of(a)
+            if vehicle is None:
+                events[a] = {"goal": False, "crash": False, "deadend": False, "collision": False}
+                continue
+
+            pos = getattr(vehicle, "position", (0.0, 0.0))
+            x = float(pos[0])
+            crashed = bool(getattr(vehicle, "crashed", False))
+            lane_index = getattr(vehicle, "lane_index", None)
+
+            # ゴール到達
+            is_goal = x >= goal_x
+
+            # デッドエンド（合流レーンで merge_end を超過）
+            is_ramp = (
+                lane_index is not None
+                and len(lane_index) >= 2
+                and lane_index[0] == "j"
+                and lane_index[1] == "k"
+            )
+            is_deadend = is_ramp and x >= merge_end
+
+            # 衝突
+            is_collision = crashed
+
+            events[a] = {
+                "goal": is_goal,
+                "crash": crashed or is_deadend,
+                "deadend": is_deadend,
+                "collision": is_collision,
+            }
+
+        return events
 
 
     def render(self) -> Optional[np.ndarray]:
@@ -156,15 +300,58 @@ class HighwayMultiEnv(ParallelEnv):
         self.env.close()
 
     def _build_obs_space(self) -> spaces.Box:
-        obs_dim = self.obs_dim
-        obs_low = np.array([-np.inf] * obs_dim, dtype=np.float32)
-        obs_high = np.array([np.inf] * obs_dim, dtype=np.float32)
+        """17次元の観測空間を構築
 
-        if obs_dim >= 4:
-            obs_low[2] = 0.0
-            obs_high[2] = 200.0
-            obs_low[3] = -50.0
-            obs_high[3] = 50.0
+        観測空間の構成:
+        [0]  is_active        - 車両がアクティブか (0/1)
+        [1]  has_left_lane    - 左レーンの有無 (0/1)
+        [2]  has_right_lane   - 右レーンの有無 (0/1)
+        [3]  deadend_dist     - 合流レーン終端までの距離特徴量 [0, max_deadend_obs]
+        [4]  self_speed       - 自車速度 (km/h) [0, 200]
+        [5-6]   同一レーン前方: (速度 [0,200], 距離特徴量 [0,max_obs_dist])
+        [7-8]   同一レーン後方: (速度 [0,200], 距離特徴量 [0,max_obs_dist])
+        [9-10]  左レーン前方:   (速度 [0,200], 距離特徴量 [0,max_obs_dist])
+        [11-12] 左レーン後方:   (速度 [0,200], 距離特徴量 [0,max_obs_dist])
+        [13-14] 右レーン前方:   (速度 [0,200], 距離特徴量 [0,max_obs_dist])
+        [15-16] 右レーン後方:   (速度 [0,200], 距離特徴量 [0,max_obs_dist])
+        """
+        obs_dim = self.obs_dim
+        max_obs_dist = float(self.config.max_obs_dist)
+        max_deadend_obs = float(self.config.max_deadend_obs)
+
+        if obs_dim == 17:
+            # 17次元観測空間の範囲を定義
+            obs_low = np.array([
+                0.0,    # [0] is_active
+                0.0,    # [1] has_left_lane
+                0.0,    # [2] has_right_lane
+                0.0,    # [3] deadend_dist
+                0.0,    # [4] self_speed
+                0.0, 0.0,    # [5-6] same front
+                0.0, 0.0,    # [7-8] same back
+                0.0, 0.0,    # [9-10] left front
+                0.0, 0.0,    # [11-12] left back
+                0.0, 0.0,    # [13-14] right front
+                0.0, 0.0,    # [15-16] right back
+            ], dtype=np.float32)
+
+            obs_high = np.array([
+                1.0,    # [0] is_active
+                1.0,    # [1] has_left_lane
+                1.0,    # [2] has_right_lane
+                max_deadend_obs,    # [3] deadend_dist
+                200.0,  # [4] self_speed (km/h)
+                200.0, max_obs_dist,    # [5-6] same front
+                200.0, max_obs_dist,    # [7-8] same back
+                200.0, max_obs_dist,    # [9-10] left front
+                200.0, max_obs_dist,    # [11-12] left back
+                200.0, max_obs_dist,    # [13-14] right front
+                200.0, max_obs_dist,    # [15-16] right back
+            ], dtype=np.float32)
+        else:
+            # 旧形式との互換性のためのフォールバック
+            obs_low = np.array([-np.inf] * obs_dim, dtype=np.float32)
+            obs_high = np.array([np.inf] * obs_dim, dtype=np.float32)
 
         return spaces.Box(
             low=obs_low,
