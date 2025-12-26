@@ -79,11 +79,29 @@ QUALITY_MAX_CHECKS = get_env_int("QUALITY_MAX_CHECKS", 4)  # 最大チェック�
 
 OBSERVATION_TYPE = get_env_str("OBSERVATION_TYPE", "Kinematics")
 DURATION = get_env_int("DURATION", 40)
-OBS_SHAPE = get_env_tuple("OBS_SHAPE", (3,))
+OBS_SHAPE = get_env_tuple("OBS_SHAPE", (17,))  # 17次元観測空間
 OBS_DTYPE = get_env_str("OBS_DTYPE", "float32")
-ACTION_SPACE_SIZE = get_env_int("ACTION_SPACE_SIZE", 5)
+ACTION_SPACE_SIZE = get_env_int("ACTION_SPACE_SIZE", 5)  # 後でMultiDiscreteに変更予定
 SPEED_NORMALIZATION = get_env_float("SPEED_NORMALIZATION", 30.0)
 CRASH_PENALTY = get_env_float("CRASH_PENALTY", -100.0)
+
+# 道路パラメータ
+GOAL_X = get_env_float("GOAL_X", 1000.0)  # ゴールのx座標
+MERGE_START = get_env_float("MERGE_START", 400.0)  # 合流開始x座標
+MERGE_END = get_env_float("MERGE_END", 600.0)  # 合流終了x座標（デッドエンド）
+LANE_WIDTH = get_env_float("LANE_WIDTH", 4.0)  # レーン幅
+
+# 観測パラメータ
+MAX_OBS_DIST = get_env_float("MAX_OBS_DIST", 200.0)  # 前方/後方車両の最大観測距離
+MAX_DEADEND_OBS = get_env_float("MAX_DEADEND_OBS", 400.0)  # デッドエンド距離の最大観測距離
+
+# 報酬パラメータ
+REWARD_GOAL = get_env_float("REWARD_GOAL", 10.0)  # ゴール到達報酬
+CLOSE_DIST_THRESHOLD = get_env_float("CLOSE_DIST_THRESHOLD", 20.0)  # 車間距離ペナルティ閾値
+CLOSE_PENALTY_BASE = get_env_float("CLOSE_PENALTY_BASE", -40.0)  # 車間距離ペナルティ基本値
+CLOSE_PENALTY_SLOPE = get_env_float("CLOSE_PENALTY_SLOPE", 2.0)  # 車間距離ペナルティ傾き
+ACCEL_PENALTY_SCALE = get_env_float("ACCEL_PENALTY_SCALE", 0.1)  # 加減速ペナルティ係数
+LANE_CHANGE_PENALTY = get_env_float("LANE_CHANGE_PENALTY", -0.1)  # レーン変更ペナルティ
 
 # カメラズーム
 CAMERA_ZOOM = get_env_float("CAMERA_ZOOM", 5.0)
@@ -124,12 +142,12 @@ MAX_STEPS = get_env_int("MAX_STEPS", 1000)
 @dataclass
 class HighwayEnvConfig:
     """高速道路環境の設定クラス"""
-    
+
     # 環境の基本設定
     env_name: str = ENV_NAME
     num_agents: int = NUM_AGENTS
     render_mode: Optional[str] = RENDER_MODE  # "human" or None
-    
+
     # 環境パラメータ
     vehicles_count: Optional[int] = VEHICLES_COUNT  # Noneの場合はnum_agentsを使用
     controlled_vehicles: Optional[int] = CONTROLLED_VEHICLES  # Noneの場合はnum_agentsを使用
@@ -139,17 +157,33 @@ class HighwayEnvConfig:
     spawn_cooldown_steps: int = SPAWN_COOLDOWN_STEPS  # 同一レーンへの連続生成を防ぐクールダウン
     observation_type: str = OBSERVATION_TYPE
     duration: int = DURATION
-    
+
     # 観測空間の設定
-    obs_shape: tuple = OBS_SHAPE  # [x位置, y位置, 速度]
+    obs_shape: tuple = OBS_SHAPE  # 17次元観測空間
     obs_dtype: str = OBS_DTYPE
-    
+
     # 行動空間の設定
     action_space_size: int = ACTION_SPACE_SIZE  # 0:減速, 1:維持, 2:加速, 3:左レーン変更, 4:右レーン変更
-    
+
     # 報酬設定
     speed_normalization: float = SPEED_NORMALIZATION  # 速度の正規化係数
     crash_penalty: float = CRASH_PENALTY  # 衝突時のペナルティ
+    reward_goal: float = REWARD_GOAL  # ゴール到達報酬
+    close_dist_threshold: float = CLOSE_DIST_THRESHOLD  # 車間距離ペナルティ閾値
+    close_penalty_base: float = CLOSE_PENALTY_BASE  # 車間距離ペナルティ基本値
+    close_penalty_slope: float = CLOSE_PENALTY_SLOPE  # 車間距離ペナルティ傾き
+    accel_penalty_scale: float = ACCEL_PENALTY_SCALE  # 加減速ペナルティ係数
+    lane_change_penalty: float = LANE_CHANGE_PENALTY  # レーン変更ペナルティ
+
+    # 道路パラメータ
+    goal_x: float = GOAL_X  # ゴールのx座標
+    merge_start: float = MERGE_START  # 合流開始x座標
+    merge_end: float = MERGE_END  # 合流終了x座標（デッドエンド）
+    lane_width: float = LANE_WIDTH  # レーン幅
+
+    # 観測パラメータ
+    max_obs_dist: float = MAX_OBS_DIST  # 前方/後方車両の最大観測距離
+    max_deadend_obs: float = MAX_DEADEND_OBS  # デッドエンド距離の最大観測距離
 
     # 時間設定
     simulation_frequency: int = SIMULATION_FREQUENCY
