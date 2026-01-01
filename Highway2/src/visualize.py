@@ -105,11 +105,11 @@ def render_video(
     print(f"  Duration: {seconds}s at {fps}fps")
 
     cfg = CoopMergeConfig()
-    env = CoopMergeEnv(num_agents=20, config=cfg, seed=seed)
+    env = CoopMergeEnv(num_agents=12, config=cfg, seed=seed)
     agents = env.possible_agents
 
     # モデル読み込み用VecEnv
-    base = CoopMergeEnv(num_agents=20, config=cfg, seed=seed)
+    base = CoopMergeEnv(num_agents=12, config=cfg, seed=seed)
     venv = ss.pettingzoo_env_to_vec_env_v1(base)
     venv = ss.concat_vec_envs_v1(
         venv,

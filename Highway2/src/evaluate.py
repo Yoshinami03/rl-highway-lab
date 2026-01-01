@@ -19,7 +19,7 @@ from stable_baselines3.common.vec_env import VecMonitor
 from env import CoopMergeEnv, CoopMergeConfig
 
 
-NUM_AGENTS = 20  # 1インスタンス内のエージェント数
+NUM_AGENTS = 12  # 1インスタンス内のエージェント数
 
 
 def make_vec_env(num_envs: int = 4, seed: int = 0):

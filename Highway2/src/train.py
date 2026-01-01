@@ -22,7 +22,7 @@ from stable_baselines3.common.vec_env import VecMonitor
 from env import CoopMergeEnv, CoopMergeConfig
 
 
-def make_vec_env(num_agents: int = 20, num_envs: int = 1, seed: int = 0):
+def make_vec_env(num_agents: int = 12, num_envs: int = 1, seed: int = 0):
     """PettingZoo環境をSB3用VecEnvに変換"""
     base = CoopMergeEnv(num_agents=num_agents, config=CoopMergeConfig(), seed=seed)
     venv = ss.pettingzoo_env_to_vec_env_v1(base)
