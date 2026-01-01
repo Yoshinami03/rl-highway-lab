@@ -29,7 +29,7 @@ class CoopMergeConfig:
     max_deadend_obs: float = 400.0
     adj_obs_unlock_x: float = 200.0
 
-    spawn_min_dist: float = 20.0
+    spawn_min_dist: float = 15.0  # 渋滞対応: 車間距離を詰める
     spawn_lane_cooldown_steps: int = 5
     spawn_attempts_per_step: int = 8
 
@@ -57,8 +57,9 @@ class CoopMergeConfig:
 
     speed_action_deltas_kmh: Tuple[float, ...] = (-20.0, -10.0, 0.0, 10.0, 20.0)
 
-    density_min: int = 6
-    density_max: int = 12
+    # 渋滞シチュエーション対応: 高密度状態がたまに発生するよう調整
+    density_min: int = 8   # 最低8台（ある程度の混雑を維持）
+    density_max: int = 20  # 最大20台（渋滞状態を発生させる）
 
     @property
     def goal_x(self) -> float:
@@ -90,7 +91,7 @@ class CoopMergeEnv(ParallelEnv):
 
     def __init__(
         self,
-        num_agents: int = 12,
+        num_agents: int = 20,  # 渋滞対応: 最大20台
         config: Optional[CoopMergeConfig] = None,
         seed: Optional[int] = None,
         render_mode: Optional[str] = None,
