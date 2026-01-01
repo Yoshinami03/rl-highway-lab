@@ -16,7 +16,7 @@ import supersuit as ss
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import VecMonitor
 
-from env import CoopMergeEnv, CoopMergeConfig
+from Env import CoopMergeEnv, CoopMergeConfig
 
 
 NUM_AGENTS = 12  # 1インスタンス内のエージェント数

@@ -19,7 +19,7 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import CheckpointCallback
 from stable_baselines3.common.vec_env import VecMonitor
 
-from env import CoopMergeEnv, CoopMergeConfig
+from Env import CoopMergeEnv, CoopMergeConfig
 
 
 def make_vec_env(num_agents: int = 12, num_envs: int = 1, seed: int = 0):
