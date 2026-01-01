@@ -223,3 +223,7 @@ highway-merge-ppo*
 
 # vscode
 .vscode
+
+# other
+.python-version
+demo.mp4
