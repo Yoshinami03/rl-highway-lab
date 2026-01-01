@@ -217,3 +217,9 @@ highway-merge-ppo*
 *.zip
 *-ppo/
 *-ppo.zip
+
+# claude
+.claude
+
+# vscode
+.vscode
