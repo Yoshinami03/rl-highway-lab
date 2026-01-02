@@ -20,7 +20,7 @@ from stable_baselines3.common.callbacks import CheckpointCallback
 from stable_baselines3.common.vec_env import VecMonitor
 
 from config import CoopMergeConfig
-from env import CoopMergeEnv
+from Env import CoopMergeEnv
 
 
 def make_vec_env(num_agents: int = 12, num_envs: int = 1, seed: int = 0):

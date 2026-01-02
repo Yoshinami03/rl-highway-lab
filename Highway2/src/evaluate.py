@@ -17,7 +17,7 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import VecMonitor
 
 from config import CoopMergeConfig
-from env import CoopMergeEnv
+from Env import CoopMergeEnv
 
 
 NUM_AGENTS = 12  # 1インスタンス内のエージェント数
