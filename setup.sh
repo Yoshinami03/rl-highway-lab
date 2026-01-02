@@ -15,6 +15,10 @@ if ! command -v pyenv >/dev/null 2>&1; then
   exit 1
 fi
 
+echo "==> Initializing pyenv in this shell..."
+export PATH="$HOME/.pyenv/bin:$PATH"
+eval "$(pyenv init -)"
+
 echo "==> Ensuring Python ${PY_VER} is installed via pyenv..."
 pyenv install -s "${PY_VER}"
 
