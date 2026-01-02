@@ -33,6 +33,8 @@ echo "==> Creating virtualenv with Python ${PY_VER}..."
 echo "==> Upgrading pip/wheel and installing requirements..."
 "${REPO_ROOT}/.venv/bin/pip" install --upgrade pip wheel
 "${REPO_ROOT}/.venv/bin/pip" install -r "${REPO_ROOT}/requirements.txt"
+# Ensure ffmpeg extra for imageio is present (quiet install)
+"${REPO_ROOT}/.venv/bin/pip" -q install "imageio[ffmpeg]" >/dev/null
 
 echo ""
 echo "Setup complete."
