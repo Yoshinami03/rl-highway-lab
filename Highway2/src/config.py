@@ -1,0 +1,70 @@
+"""環境設定パラメータ"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Optional
+
+
+@dataclass
+class CoopMergeConfig:
+    """協調合流環境の設定パラメータ"""
+
+    # geometry
+    pre_merge: float = 400.0
+    merge_length: float = 200.0
+    post_merge: float = 400.0
+
+    # simulation
+    episode_horizon: int = 500
+    dt: float = 1.0
+
+    # lanes
+    lane_width: float = 4.0
+    main_lane_count: int = 3
+
+    # speeds
+    vmin_kmh: float = 80.0
+    vmax_kmh: float = 150.0
+    dv_kmh: float = 10.0
+    vclip_min_kmh: float = 0.0
+
+    # perception
+    max_obs_dist: float = 200.0
+    max_deadend_obs: float = 400.0
+    adj_obs_unlock_x: float = 200.0
+
+    # spawn
+    spawn_min_dist: float = 20.0
+    spawn_lane_cooldown_steps: int = 5
+    spawn_attempts_per_step: int = 8
+
+    # lane change
+    lane_change_steps: int = 2
+
+    # collision
+    collision_radius: float = 2.5
+    collision_dist: float = 2.0
+    vehicle_length: Optional[float] = None
+
+    # reward
+    reward_goal: float = 10.0
+    reward_crash: float = -100.0
+
+    close_dist_threshold: float = 20.0
+    close_penalty_base: float = -40.0
+    close_penalty_slope: float = 2.0
+
+    accel_penalty_scale: float = 0.1
+    lane_change_penalty: float = -0.1
+
+    @property
+    def goal_x(self) -> float:
+        return self.pre_merge + self.merge_length + self.post_merge
+
+    @property
+    def merge_start(self) -> float:
+        return self.pre_merge
+
+    @property
+    def merge_end(self) -> float:
+        return self.pre_merge + self.merge_length

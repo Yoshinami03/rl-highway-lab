@@ -26,7 +26,8 @@ try:
 except ImportError:
     HAS_RENDER_DEPS = False
 
-from env import CoopMergeEnv, CoopMergeConfig
+from config import CoopMergeConfig
+from env import CoopMergeEnv
 
 
 def render_frame(env, cfg, xlim, width=960, height=540, dpi=100, y_scale=4.0):
