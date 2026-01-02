@@ -17,14 +17,11 @@ import supersuit as ss
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import VecMonitor
 
-try:
-    import imageio.v2 as imageio
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-    HAS_RENDER_DEPS = True
-except ImportError:
-    HAS_RENDER_DEPS = False
+import imageio.v2 as imageio
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+HAS_RENDER_DEPS = True
 
 from config import CoopMergeConfig
 from env import CoopMergeEnv
