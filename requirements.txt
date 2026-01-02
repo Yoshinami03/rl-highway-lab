@@ -1,0 +1,7 @@
+numpy
+gymnasium
+pettingzoo
+supersuit
+stable-baselines3
+imageio[ffmpeg]
+matplotlib
