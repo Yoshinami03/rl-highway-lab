@@ -229,7 +229,26 @@ class CoopMergeEnv(ParallelEnv):
         time_up = (self.t >= int(self.cfg.episode_horizon))
 
         obs = {a: self._obs(i) for i, a in enumerate(self.possible_agents)}
-        rewards = {a: float(common_reward) for a in self.possible_agents}
+
+        # 個人報酬を計算
+        rewards = {}
+        for i, a in enumerate(self.possible_agents):
+            individual_reward = 0.0
+
+            # 個人がゴールした報酬
+            if goal_mask[i]:
+                individual_reward += self.cfg.individual_reward_goal
+
+            # 個人がクラッシュした罰
+            if crash_mask[i]:
+                individual_reward += self.cfg.individual_reward_crash
+
+            # 個人の不要な車線変更罰（マージ以外）
+            if lane_change_started[i] and not lane_change_is_merge[i]:
+                individual_reward += self.cfg.individual_lane_change_penalty
+
+            rewards[a] = common_reward + individual_reward
+
         terminations = {a: False for a in self.possible_agents}
         truncations = {a: bool(time_up) for a in self.possible_agents}
 

@@ -34,9 +34,9 @@ class CoopMergeConfig:
     adj_obs_unlock_x: float = 200.0
 
     # spawn
-    spawn_min_dist: float = 20.0
-    spawn_lane_cooldown_steps: int = 5
-    spawn_attempts_per_step: int = 8
+    spawn_min_dist: float = 2.0
+    spawn_lane_cooldown_steps: int = 2
+    spawn_attempts_per_step: int = 15
 
     # lane change
     lane_change_steps: int = 2
@@ -46,7 +46,7 @@ class CoopMergeConfig:
     collision_dist: float = 2.0
     vehicle_length: Optional[float] = None
 
-    # reward
+    # reward (team)
     reward_goal: float = 10.0
     reward_crash: float = -100.0
 
@@ -56,6 +56,11 @@ class CoopMergeConfig:
 
     accel_penalty_scale: float = 0.1
     lane_change_penalty: float = -0.1
+
+    # reward (individual)
+    individual_reward_goal: float = 5.0
+    individual_reward_crash: float = -50.0
+    individual_lane_change_penalty: float = -0.05
 
     @property
     def goal_x(self) -> float:
