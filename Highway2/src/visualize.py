@@ -24,7 +24,7 @@ import matplotlib.pyplot as plt
 HAS_RENDER_DEPS = True
 
 from config import CoopMergeConfig
-from env import CoopMergeEnv
+from Env import CoopMergeEnv
 
 
 def render_frame(env, cfg, xlim, width=960, height=540, dpi=100, y_scale=4.0):
