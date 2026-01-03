@@ -3,9 +3,9 @@
 Highway2 学習スクリプト
 
 使い方:
-    python train.py                    # 新規学習（デフォルト10万ステップ）
+    python train.py                    # 既存モデルがあれば継続、なければ新規（デフォルト10万ステップ）
     python train.py --timesteps 500000 # 50万ステップ学習
-    python train.py --resume model.zip # 既存モデルから追加学習
+    python train.py --new              # 強制的に新規モデルを作成
     python train.py --eval-only        # 評価のみ
     python train.py --render-only      # 描画のみ
 """
@@ -13,7 +13,6 @@ Highway2 学習スクリプト
 import argparse
 from pathlib import Path
 
-import numpy as np
 import supersuit as ss
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import CheckpointCallback
@@ -39,18 +38,28 @@ def make_vec_env(num_agents: int = 12, num_envs: int = 1, seed: int = 0):
 
 def train(
     timesteps: int = 100_000,
-    resume_path: str | None = None,
     save_path: str = "./ppo_trained.zip",
     checkpoint_freq: int = 50_000,
     seed: int = 0,
+    force_new: bool = False,
 ):
     """学習を実行"""
     print("=" * 50)
     print(" Highway2 Training")
     print("=" * 50)
     print(f"  Timesteps    : {timesteps:,}")
-    print(f"  Resume from  : {resume_path or 'None (new model)'}")
     print(f"  Save to      : {save_path}")
+
+    # 既存モデルの自動検出（force_newがFalseの場合）
+    resume_path = None
+    if not force_new and Path(save_path).exists():
+        resume_path = save_path
+        print(f"  Resume from  : {resume_path} (auto-detected)")
+    elif force_new:
+        print(f"  Resume from  : None (force new model)")
+    else:
+        print(f"  Resume from  : None (no existing model)")
+
     print("=" * 50)
 
     venv = make_vec_env(seed=seed)
@@ -73,7 +82,7 @@ def train(
     print(f"\nStarting training for {timesteps:,} timesteps...")
     model.learn(
         total_timesteps=timesteps,
-        reset_num_timesteps=(resume_path is None),
+        reset_num_timesteps=(resume_path is None or force_new),
         callback=ckpt_cb,
         progress_bar=False,
     )
@@ -99,7 +108,7 @@ def visualize(model_path: str, output_path: str = "./demo.mp4"):
 def main():
     parser = argparse.ArgumentParser(description="Highway2 Training Script")
     parser.add_argument("--timesteps", type=int, default=100_000, help="学習ステップ数")
-    parser.add_argument("--resume", type=str, default=None, help="追加学習するモデルのパス")
+    parser.add_argument("--new", action="store_true", help="既存モデルを無視して新規作成")
     parser.add_argument("--save", type=str, default="./ppo_trained.zip", help="保存先パス")
     parser.add_argument("--seed", type=int, default=0, help="シード値")
     parser.add_argument("--eval-only", action="store_true", help="評価のみ実行")
@@ -128,9 +137,9 @@ def main():
     # 学習
     model_path = train(
         timesteps=args.timesteps,
-        resume_path=args.resume,
         save_path=args.save,
         seed=args.seed,
+        force_new=args.new,
     )
 
     # 評価
