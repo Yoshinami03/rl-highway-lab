@@ -9,6 +9,9 @@ from typing import Optional
 class CoopMergeConfig:
     """協調合流環境の設定パラメータ"""
 
+    # agents
+    num_agents: int = 48
+
     # geometry
     pre_merge: float = 400.0
     merge_length: float = 200.0
@@ -83,8 +86,8 @@ class CoopMergeConfig:
     # Initial traffic configuration
     initial_traffic_mode: str = "congestion"  # "normal", "congestion"
     congestion_density: float = 0.9  # 道路の占有率（0.0-1.0）
-    congestion_spacing_min: float = 5.0  # 車両間の最小距離
-    congestion_spacing_max: float = 15.0  # 車両間の最大距離
+    congestion_spacing_min: float = 2.0  # 車両間の最小距離
+    congestion_spacing_max: float = 5.0  # 車両間の最大距離
     congestion_start_x: float = 0.0  # 渋滞開始位置
     congestion_end_x: float = 600.0  # 渋滞終了位置
     congestion_speed_min_kmh: float = 30.0  # 渋滞時の最低速度

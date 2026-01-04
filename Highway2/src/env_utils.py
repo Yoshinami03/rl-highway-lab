@@ -8,11 +8,11 @@ from config import CoopMergeConfig
 from Env import CoopMergeEnv
 
 
-def make_vec_env(num_agents: int = 12, num_envs: int = 1, seed: int = 0,
+def make_vec_env(num_envs: int = 1, seed: int = 0,
                  config: Optional[CoopMergeConfig] = None):
     """PettingZoo環境をSB3用VecEnvに変換"""
     cfg = config or CoopMergeConfig()
-    base = CoopMergeEnv(num_agents=num_agents, config=cfg, seed=seed)
+    base = CoopMergeEnv(num_agents=cfg.num_agents, config=cfg, seed=seed)
     venv = ss.pettingzoo_env_to_vec_env_v1(base)
     venv = ss.concat_vec_envs_v1(
         venv,

@@ -92,7 +92,6 @@ def render_video(
     fps: int = 15,
     seconds: int = 12,
     seed: int = 0,
-    num_agents: int = 12,
     config: Optional[CoopMergeConfig] = None,
 ) -> str:
     """動画を生成"""
@@ -100,17 +99,18 @@ def render_video(
         raise ImportError("imageio and matplotlib are required for rendering. "
                          "Install with: pip install imageio[ffmpeg] matplotlib")
 
+    cfg = config or CoopMergeConfig()
+
     print(f"Rendering video: {output_path}")
     print(f"  Model: {model_path}")
     print(f"  Duration: {seconds}s at {fps}fps")
-    print(f"  Num agents: {num_agents}")
+    print(f"  Num agents: {cfg.num_agents}")
 
-    cfg = config or CoopMergeConfig()
-    env = CoopMergeEnv(num_agents=num_agents, config=cfg, seed=seed)
+    env = CoopMergeEnv(num_agents=cfg.num_agents, config=cfg, seed=seed)
     agents = env.possible_agents
 
     # モデル読み込み用VecEnv（train.pyと同じ関数を使用）
-    venv = make_vec_env(num_agents=num_agents, num_envs=1, seed=seed, config=cfg)
+    venv = make_vec_env(num_envs=1, seed=seed, config=cfg)
 
     model = PPO.load(model_path, env=venv, device="cpu")
 
@@ -172,7 +172,6 @@ def main():
     parser.add_argument("--fps", type=int, default=15, help="FPS")
     parser.add_argument("--seconds", type=int, default=12, help="動画の長さ（秒）")
     parser.add_argument("--seed", type=int, default=0, help="シード値")
-    parser.add_argument("--num-agents", type=int, default=12, help="エージェント数")
 
     args = parser.parse_args()
 
@@ -186,7 +185,6 @@ def main():
         fps=args.fps,
         seconds=args.seconds,
         seed=args.seed,
-        num_agents=args.num_agents,
     )
 
 
