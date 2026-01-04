@@ -38,7 +38,7 @@ class CoopMergeConfig:
     spawn_lane_cooldown_steps: int = 2
     spawn_lane_cooldown_variance: int = 2  # ランダムな分散（0～この値）
     spawn_attempts_per_step: int = 15
-    max_spawns_per_step: int = 2  # 1ステップあたりの最大生成数
+    max_spawns_per_step: int = 3  # 1ステップあたりの最大生成数
     agent_cooldown_min: int = 3  # エージェントクールダウンの最小値
     agent_cooldown_max: int = 8  # エージェントクールダウンの最大値
 
@@ -79,6 +79,16 @@ class CoopMergeConfig:
     ppo_gae_lambda: float = 0.95
     ppo_batch_size: int = 64
     ppo_n_epochs: int = 10
+
+    # Initial traffic configuration
+    initial_traffic_mode: str = "congestion"  # "normal", "congestion"
+    congestion_density: float = 0.9  # 道路の占有率（0.0-1.0）
+    congestion_spacing_min: float = 5.0  # 車両間の最小距離
+    congestion_spacing_max: float = 15.0  # 車両間の最大距離
+    congestion_start_x: float = 0.0  # 渋滞開始位置
+    congestion_end_x: float = 600.0  # 渋滞終了位置
+    congestion_speed_min_kmh: float = 30.0  # 渋滞時の最低速度
+    congestion_speed_max_kmh: float = 80.0  # 渋滞時の最高速度
 
     @property
     def goal_x(self) -> float:

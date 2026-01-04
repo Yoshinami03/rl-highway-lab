@@ -25,7 +25,7 @@ class CoopMergeEnv(ParallelEnv):
 
     def __init__(
         self,
-        num_agents: int = 12,
+        num_agents: int = 48,
         config: Optional[CoopMergeConfig] = None,
         seed: Optional[int] = None,
         render_mode: Optional[str] = None,
@@ -89,7 +89,11 @@ class CoopMergeEnv(ParallelEnv):
 
         self.spawn_cd[:] = 0
 
-        self._spawn_from_pool(max_new=min(self._num_agents, 4))
+        # 初期配置モードに応じて車両を生成
+        if self.cfg.initial_traffic_mode == "congestion":
+            self._create_initial_congestion()
+        else:  # "normal"
+            self._spawn_from_pool(max_new=min(self._num_agents, 4))
 
         obs = {a: self._obs(i) for i, a in enumerate(self.possible_agents)}
         infos = {a: {} for a in self.possible_agents}
@@ -417,6 +421,76 @@ class CoopMergeEnv(ParallelEnv):
                     break
             if not ok:
                 continue
+        return spawned
+
+    def _create_initial_congestion(self) -> int:
+        """全車線のレーン全体に渋滞状態を作成する"""
+        lanes = [0, 1, 2, 3]  # 全レーン使用
+
+        # レーン全体の長さ
+        lane_length = self.cfg.goal_x
+
+        # 平均車両間隔
+        avg_spacing = (self.cfg.congestion_spacing_min + self.cfg.congestion_spacing_max) / 2.0
+
+        # 1レーンあたりの車両数を推定
+        vehicles_per_lane = int(lane_length / avg_spacing * self.cfg.congestion_density)
+
+        # 全レーンの合計車両数
+        total_vehicles = min(vehicles_per_lane * len(lanes), self._num_agents)
+
+        spawned = 0
+        agent_idx = 0
+
+        # 各レーンに順番に配置
+        for lane_idx, lane in enumerate(lanes):
+            if spawned >= total_vehicles:
+                break
+
+            # このレーンに配置する車両数
+            remaining_agents = total_vehicles - spawned
+            remaining_lanes = len(lanes) - lane_idx
+            num_in_lane = min(vehicles_per_lane, remaining_agents,
+                            remaining_agents // remaining_lanes + (1 if remaining_agents % remaining_lanes > lane_idx else 0))
+
+            # レーン内で等間隔に配置（後方から前方へ）
+            for i in range(num_in_lane):
+                if agent_idx >= self._num_agents:
+                    break
+
+                # 位置を決定（ランダムなばらつきを追加）
+                # 後方から順に配置するので、i=0が最後方、i=num_in_lane-1が最前方
+                base_x = (i + 1) * (lane_length / (num_in_lane + 1))
+
+                # ランダムなオフセット
+                random_offset = self.np_random.uniform(
+                    -self.cfg.congestion_spacing_min / 3,
+                    self.cfg.congestion_spacing_min / 3
+                )
+                x = float(np.clip(base_x + random_offset, 0.0, lane_length))
+
+                # 速度をランダムに設定（渋滞なので低速）
+                v_kmh = float(self.np_random.uniform(
+                    self.cfg.congestion_speed_min_kmh,
+                    self.cfg.congestion_speed_max_kmh
+                ))
+
+                # エージェントを配置
+                self.active[agent_idx] = True
+                self.x[agent_idx] = x
+                self.y[agent_idx] = self._lane_center_y(lane, x)
+                self.lane[agent_idx] = int(lane)
+                self.v_mps[agent_idx] = kmh_to_mps(v_kmh)
+
+                self.lc_rem[agent_idx] = 0
+                self.lc_tot[agent_idx] = 0
+                self.lc_start_y[agent_idx] = self.y[agent_idx]
+                self.lc_end_y[agent_idx] = self.y[agent_idx]
+                self.lc_target_lane[agent_idx] = int(lane)
+
+                agent_idx += 1
+                spawned += 1
+
         return spawned
 
     def _adj_obs_allowed(self, i: int) -> bool:

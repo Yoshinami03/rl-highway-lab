@@ -11,11 +11,10 @@ Highway2 描画スクリプト
 
 import argparse
 from pathlib import Path
+from typing import Optional
 
 import numpy as np
-import supersuit as ss
 from stable_baselines3 import PPO
-from stable_baselines3.common.vec_env import VecMonitor
 
 import imageio.v2 as imageio
 import matplotlib
@@ -25,6 +24,7 @@ HAS_RENDER_DEPS = True
 
 from config import CoopMergeConfig
 from Env import CoopMergeEnv
+from env_utils import make_vec_env
 
 
 def render_frame(env, cfg, xlim, width=960, height=540, dpi=100, y_scale=4.0):
@@ -92,6 +92,8 @@ def render_video(
     fps: int = 15,
     seconds: int = 12,
     seed: int = 0,
+    num_agents: int = 12,
+    config: Optional[CoopMergeConfig] = None,
 ) -> str:
     """動画を生成"""
     if not HAS_RENDER_DEPS:
@@ -101,21 +103,14 @@ def render_video(
     print(f"Rendering video: {output_path}")
     print(f"  Model: {model_path}")
     print(f"  Duration: {seconds}s at {fps}fps")
+    print(f"  Num agents: {num_agents}")
 
-    cfg = CoopMergeConfig()
-    env = CoopMergeEnv(num_agents=12, config=cfg, seed=seed)
+    cfg = config or CoopMergeConfig()
+    env = CoopMergeEnv(num_agents=num_agents, config=cfg, seed=seed)
     agents = env.possible_agents
 
-    # モデル読み込み用VecEnv
-    base = CoopMergeEnv(num_agents=12, config=cfg, seed=seed)
-    venv = ss.pettingzoo_env_to_vec_env_v1(base)
-    venv = ss.concat_vec_envs_v1(
-        venv,
-        num_vec_envs=1,
-        num_cpus=0,
-        base_class="stable_baselines3",
-    )
-    venv = VecMonitor(venv)
+    # モデル読み込み用VecEnv（train.pyと同じ関数を使用）
+    venv = make_vec_env(num_agents=num_agents, num_envs=1, seed=seed, config=cfg)
 
     model = PPO.load(model_path, env=venv, device="cpu")
 
@@ -177,6 +172,7 @@ def main():
     parser.add_argument("--fps", type=int, default=15, help="FPS")
     parser.add_argument("--seconds", type=int, default=12, help="動画の長さ（秒）")
     parser.add_argument("--seed", type=int, default=0, help="シード値")
+    parser.add_argument("--num-agents", type=int, default=12, help="エージェント数")
 
     args = parser.parse_args()
 
@@ -190,6 +186,7 @@ def main():
         fps=args.fps,
         seconds=args.seconds,
         seed=args.seed,
+        num_agents=args.num_agents,
     )
 
 
