@@ -12,6 +12,7 @@ Highway2 学習スクリプト
 
 import argparse
 from pathlib import Path
+from typing import Optional
 
 import supersuit as ss
 from stable_baselines3 import PPO
@@ -22,9 +23,11 @@ from config import CoopMergeConfig
 from Env import CoopMergeEnv
 
 
-def make_vec_env(num_agents: int = 12, num_envs: int = 1, seed: int = 0):
+def make_vec_env(num_agents: int = 12, num_envs: int = 1, seed: int = 0,
+                 config: Optional[CoopMergeConfig] = None):
     """PettingZoo環境をSB3用VecEnvに変換"""
-    base = CoopMergeEnv(num_agents=num_agents, config=CoopMergeConfig(), seed=seed)
+    cfg = config or CoopMergeConfig()
+    base = CoopMergeEnv(num_agents=num_agents, config=cfg, seed=seed)
     venv = ss.pettingzoo_env_to_vec_env_v1(base)
     venv = ss.concat_vec_envs_v1(
         venv,
@@ -42,8 +45,11 @@ def train(
     checkpoint_freq: int = 50_000,
     seed: int = 0,
     force_new: bool = False,
+    config: Optional[CoopMergeConfig] = None,
 ):
     """学習を実行"""
+    cfg = config or CoopMergeConfig()
+
     print("=" * 50)
     print(" Highway2 Training")
     print("=" * 50)
@@ -62,16 +68,31 @@ def train(
 
     print("=" * 50)
 
-    venv = make_vec_env(seed=seed)
+    venv = make_vec_env(seed=seed, config=cfg)
 
     if resume_path and Path(resume_path).exists():
         print(f"\nLoading model from {resume_path}...")
         model = PPO.load(resume_path, env=venv, device="cpu")
-        model.ent_coef = 0.001
-        model.learning_rate = 1e-4
+        # Update hyperparameters from config
+        model.learning_rate = cfg.ppo_learning_rate
+        model.ent_coef = cfg.ppo_entropy_coef
+        model.vf_coef = cfg.ppo_vf_coef
     else:
         print("\nCreating new model...")
-        model = PPO("MlpPolicy", venv, verbose=1, device="cpu")
+        model = PPO(
+            "MlpPolicy",
+            venv,
+            verbose=1,
+            device="cpu",
+            learning_rate=cfg.ppo_learning_rate,
+            ent_coef=cfg.ppo_entropy_coef,
+            vf_coef=cfg.ppo_vf_coef,
+            clip_range=cfg.ppo_clip_range,
+            gamma=cfg.ppo_gamma,
+            gae_lambda=cfg.ppo_gae_lambda,
+            batch_size=cfg.ppo_batch_size,
+            n_epochs=cfg.ppo_n_epochs,
+        )
 
     ckpt_cb = CheckpointCallback(
         save_freq=checkpoint_freq,

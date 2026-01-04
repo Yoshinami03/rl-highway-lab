@@ -249,6 +249,11 @@ class CoopMergeEnv(ParallelEnv):
 
             rewards[a] = common_reward + individual_reward
 
+        # 報酬の正規化
+        if self.cfg.use_reward_normalization:
+            scale = self.cfg.reward_normalization_scale
+            rewards = {a: r / scale for a, r in rewards.items()}
+
         terminations = {a: False for a in self.possible_agents}
         truncations = {a: bool(time_up) for a in self.possible_agents}
 

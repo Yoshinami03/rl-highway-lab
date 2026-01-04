@@ -66,6 +66,20 @@ class CoopMergeConfig:
     individual_reward_crash: float = -50.0
     individual_lane_change_penalty: float = -0.05
 
+    # reward normalization
+    reward_normalization_scale: float = 10.0
+    use_reward_normalization: bool = True
+
+    # PPO hyperparameters
+    ppo_learning_rate: float = 3e-4
+    ppo_entropy_coef: float = 0.01
+    ppo_vf_coef: float = 0.5
+    ppo_clip_range: float = 0.2
+    ppo_gamma: float = 0.99
+    ppo_gae_lambda: float = 0.95
+    ppo_batch_size: int = 64
+    ppo_n_epochs: int = 10
+
     @property
     def goal_x(self) -> float:
         return self.pre_merge + self.merge_length + self.post_merge
