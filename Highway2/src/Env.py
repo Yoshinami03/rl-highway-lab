@@ -328,7 +328,11 @@ class CoopMergeEnv(ParallelEnv):
 
     def _deactivate_to_pool(self, i: int, reason: str = ""):
         self.active[i] = False
-        self.agent_spawn_cd[i] = 1
+        # ランダムなクールダウンを設定して同期を防ぐ
+        self.agent_spawn_cd[i] = int(self.np_random.integers(
+            self.cfg.agent_cooldown_min,
+            self.cfg.agent_cooldown_max + 1
+        ))
 
         self.x[i] = 0.0
         self.v_mps[i] = 0.0
@@ -374,12 +378,17 @@ class CoopMergeEnv(ParallelEnv):
         self.lc_rem[agent_index] = 0
         self.lc_tot[agent_index] = 0
 
-        self.spawn_cd[lane] = int(self.cfg.spawn_lane_cooldown_steps)
+        # レーンクールダウンにランダムな変動を追加して同期を防ぐ
+        variance = int(self.np_random.integers(0, self.cfg.spawn_lane_cooldown_variance + 1))
+        self.spawn_cd[lane] = int(self.cfg.spawn_lane_cooldown_steps) + variance
         return True
 
     def _spawn_from_pool(self, max_new: int) -> int:
         if max_new <= 0:
             return 0
+
+        # 1ステップあたりの最大生成数を制限
+        max_new = min(max_new, int(self.cfg.max_spawns_per_step))
 
         inactive = np.where((~self.active) & (self.agent_spawn_cd == 0))[0]
         if len(inactive) == 0:

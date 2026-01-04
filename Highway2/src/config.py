@@ -36,7 +36,11 @@ class CoopMergeConfig:
     # spawn
     spawn_min_dist: float = 2.0
     spawn_lane_cooldown_steps: int = 2
+    spawn_lane_cooldown_variance: int = 2  # ランダムな分散（0～この値）
     spawn_attempts_per_step: int = 15
+    max_spawns_per_step: int = 2  # 1ステップあたりの最大生成数
+    agent_cooldown_min: int = 3  # エージェントクールダウンの最小値
+    agent_cooldown_max: int = 8  # エージェントクールダウンの最大値
 
     # lane change
     lane_change_steps: int = 2
